@@ -76,6 +76,32 @@ def test_chmod_is_authority_grant(tmp_path):
     assert grants[0].new.endswith("777")
 
 
+def test_same_size_content_change_is_still_write(tmp_path):
+    # a malicious rewrite that keeps the byte count identical must not slip through
+    _write(str(tmp_path / "cfg.txt"), "AAAAA")
+    adapter = FilesystemAdapter(str(tmp_path))
+
+    def action(root):
+        _write(os.path.join(root, "cfg.txt"), "BBBBB")  # same length, different content
+
+    delta = simdiff(action, adapter)
+    writes = [d for d in delta.data_access if d.resource == "cfg.txt"]
+    assert len(writes) == 1
+    assert writes[0].mode == "WRITE"
+
+
+def test_empty_directory_creation_is_detected(tmp_path):
+    adapter = FilesystemAdapter(str(tmp_path))
+
+    def action(root):
+        os.mkdir(os.path.join(root, "newdir"))
+
+    delta = simdiff(action, adapter)
+    creates = [d for d in delta.data_access if d.resource == "newdir"]
+    assert len(creates) == 1
+    assert creates[0].mode == "CREATE"
+
+
 def test_action_that_raises_is_fail_closed(tmp_path):
     adapter = FilesystemAdapter(str(tmp_path))
 

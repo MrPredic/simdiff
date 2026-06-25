@@ -14,6 +14,15 @@ print(delta.to_dict())
 #  'unknown': [], 'safe': True, ...}
 ```
 
+## Where it sits
+
+```
+agent proposes action ─▶ [ simdiff: simulate ▶ canonical effect delta ] ─▶ your policy ─▶ ALLOW / BLOCK / APPROVE ─▶ real execution
+```
+
+simdiff owns exactly one box: turning a proposed action into *what it would
+actually do*. The decision and the execution stay yours.
+
 ## Why it exists
 
 The 2026 wave of pre-execution agent firewalls — [AEGIS](https://arxiv.org/abs/2603.12621),
@@ -27,6 +36,24 @@ simdiff is **not** another firewall. It is the missing piece they share: it
 **simulates** the action and returns its **canonical effect**, so a policy can
 decide over *the verified effect, not the request*. It composes with those tools
 rather than competing with them.
+
+## How it compares
+
+| Tool | Decides over | Form |
+|---|---|---|
+| agent-airlock, MS agent-governance-toolkit, Faramesh | the **call** (tool name + args, normalized/validated) | full firewall / control plane |
+| AEGIS, OAP, Agent Action Guard | the **call** (extract + scan args) before execution | full firewall |
+| **simdiff** | the **simulated effect** (what would actually change) | a **library / primitive** you feed to any of the above |
+
+The line: everyone else canonicalizes or scans the *request*. simdiff canonicalizes
+the *result of simulating it*. An argument can lie about what it does; a simulated
+effect cannot.
+
+## What simdiff is NOT
+
+- Not a policy engine — it returns the effect; **you** (or your firewall) decide.
+- Not a sandbox or a runtime — it never executes the real action.
+- Not a complete agent-security solution — it is one composable building block.
 
 ## Design principles
 

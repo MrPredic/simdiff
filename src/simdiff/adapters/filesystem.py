@@ -8,6 +8,7 @@ action raises, the effect is fail-closed (recorded in ``unknown``).
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import tempfile
@@ -21,6 +22,8 @@ from ..delta import AuthorityGrant, CanonicalDelta, DataAccess
 class _FileState:
     size: int
     mode: str
+    digest: str  # content hash; "" for directories
+    is_dir: bool = False
 
 
 @dataclass
@@ -30,14 +33,27 @@ class _FsEffect:
     error: Optional[str] = None
 
 
+def _digest(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def _snapshot(root: str) -> Dict[str, _FileState]:
     states: Dict[str, _FileState] = {}
-    for dirpath, _dirs, files in os.walk(root):
+    for dirpath, dirs, files in os.walk(root):
+        for name in dirs:
+            full = os.path.join(dirpath, name)
+            rel = os.path.relpath(full, root)
+            st = os.stat(full)
+            states[rel] = _FileState(size=0, mode=oct(st.st_mode & 0o777), digest="", is_dir=True)
         for name in files:
             full = os.path.join(dirpath, name)
             rel = os.path.relpath(full, root)
             st = os.stat(full)
-            states[rel] = _FileState(size=st.st_size, mode=oct(st.st_mode & 0o777))
+            states[rel] = _FileState(size=st.st_size, mode=oct(st.st_mode & 0o777), digest=_digest(full))
     return states
 
 
@@ -72,12 +88,13 @@ class FilesystemAdapter:
 
         for rel, st in after.items():
             if rel not in before:
+                reason = "directory created" if st.is_dir else "file created"
                 delta.data_access.append(
-                    DataAccess(resource=rel, mode="CREATE", bytes=st.size, reason="file created")
+                    DataAccess(resource=rel, mode="CREATE", bytes=st.size, reason=reason)
                 )
             else:
                 old = before[rel]
-                if st.size != old.size:
+                if not st.is_dir and st.digest != old.digest:
                     delta.data_access.append(
                         DataAccess(
                             resource=rel,

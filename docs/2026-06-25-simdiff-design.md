@@ -45,9 +45,13 @@ JSON artifact a firewall consumes.
 ```python
 class Adapter(Protocol):
     domain: str
-    def simulate(self, action, sandbox) -> Effect: ...
+    def simulate(self, action) -> Effect: ...                 # adapter holds its own context
     def extract_delta(self, effect, principal=None) -> CanonicalDelta: ...
 ```
+
+Each adapter receives its domain context in its constructor
+(`FilesystemAdapter(sandbox)`, `SqlAdapter(connection)`, `ShellAdapter(existing)`),
+so `simulate` takes only the action.
 
 Top-level convenience:
 
