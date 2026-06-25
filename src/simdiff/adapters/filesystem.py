@@ -114,10 +114,11 @@ class FilesystemAdapter:
                         )
                     )
 
-        for rel in before:
+        for rel, old in before.items():
             if rel not in after:
+                reason = "directory deleted" if old.is_dir else "file deleted"
                 delta.data_access.append(
-                    DataAccess(resource=rel, mode="DELETE", bytes=0, reason="file deleted")
+                    DataAccess(resource=rel, mode="DELETE", bytes=0, reason=reason)
                 )
 
         return delta

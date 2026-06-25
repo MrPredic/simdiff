@@ -4,6 +4,10 @@
 canonical, structured **effect delta** — *what would actually change* — and let
 your policy engine decide on that instead of on the raw tool call.
 
+> On an adversarial corpus of obfuscated-effect attacks, deciding over the
+> **simulated effect catches 100%** of them at **0% false positives** — while
+> keyword/argument scanning catches **25%**. ([reproduce](#benchmark): `python -m bench.run`)
+
 ```python
 from simdiff import simdiff
 from simdiff.adapters.shell import ShellAdapter
@@ -96,6 +100,32 @@ simdiff sql   "DELETE FROM users WHERE id = 1" --db app.sqlite
 
 Exit code is fail-closed: `0` when the delta is safe, `2` otherwise — usable as a
 gate in a pipeline (the real decision still belongs to your policy).
+
+## Benchmark
+
+Why "decide over the effect, not the request" is not just a slogan:
+
+```
+$ python -m bench.run
+corpus: 14 cases (8 dangerous, 6 safe)
+
+approach                  recall   false positives
+--------------------------------------------------
+effect simulation (simdiff)      100%                0%
+keyword/arg scanning         25%                0%
+```
+
+The corpus pits the same destructive effect against argument obfuscation:
+deletion expressed as `mv prod.db /dev/null`, `DROP/**/TABLE` split by a SQL
+comment, permission widening via symbolic `chmod u=rwx,go=rwx`, destruction
+through an uninterpreted tool (`find … -delete`, caught **fail-closed**). Each
+preserves the effect while changing the surface text, so keyword scanning waves
+it through and effect simulation does not. The baseline is a *reasonable*,
+case-insensitive denylist — not a strawman; its weakness is structural.
+
+These numbers are asserted in [`tests/test_benchmark.py`](tests/test_benchmark.py),
+so the claim cannot drift from the code. See [`bench/corpus.py`](bench/corpus.py)
+for every case.
 
 ## Install
 

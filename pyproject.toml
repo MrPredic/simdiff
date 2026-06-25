@@ -31,5 +31,5 @@ simdiff = "simdiff.cli:main"
 packages = ["src/simdiff"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
