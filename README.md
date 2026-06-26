@@ -61,12 +61,16 @@ effect cannot.
 
 ## Design principles
 
-- **Deterministic** — no LLM, no network, no cloud, no API keys in the core.
+- **Deterministic & offline** — no LLM, no cloud, no API keys. The four core
+  adapters never touch the network. (The optional Solana adapter is the one
+  exception: only a node can know a transaction's effect, so it calls an RPC
+  endpoint you provide — see below.)
 - **Fail-closed** — anything an adapter cannot classify lands in `unknown`, which
   makes the whole delta `safe == False`.
 - **No real mutation** — filesystem uses a shadow copy, SQL uses rollback, shell
-  is interpreted and never executed.
-- **Zero runtime dependencies** — pure Python standard library.
+  is interpreted, HTTP is parsed, Solana is simulated — none execute/send/broadcast.
+- **Zero runtime dependencies** — pure Python standard library (Solana RPC uses
+  `urllib`, no `solana-py` needed).
 
 ## The effect delta
 
@@ -88,9 +92,29 @@ CanonicalDelta
 | `SqlAdapter(connection)` | a SQL statement | runs inside `SAVEPOINT … ROLLBACK` | always rolls back |
 | `ShellAdapter(existing=…)` | a command line | **interprets** `rm`/`mv`/`cp`/`mkdir`/`touch`/`chmod`/redirects | never executes |
 | `HttpAdapter(allowed_hosts=…)` | an `HttpRequest` | classifies **egress** (bytes leaving for a non-allowed host) | never sends |
+| `SolanaAdapter(rpc_url=…)` | a `SolanaTransaction` | RPC `simulateTransaction` + account diff → SOL/token deltas, delegate/owner changes | never broadcasts (online) |
 
-Adding a domain = implement two methods (`simulate`, `extract_delta`). A Solana
-`simulateTransaction` adapter (real lamport/token deltas) is a natural next step.
+Adding a domain = implement two methods (`simulate`, `extract_delta`).
+
+### Solana / on-chain (the high-stakes domain)
+
+A transaction can read like "swap 5 USDC" while its real effect is "assign a
+permanent delegate that drains the token account". Instruction inspection misses
+that; simulation does not.
+
+```python
+from simdiff import simdiff
+from simdiff.adapters.solana import SolanaAdapter, SolanaTransaction
+
+adapter = SolanaAdapter(rpc_url="https://api.mainnet-beta.solana.com")
+delta = simdiff(SolanaTransaction(tx_b64, watch=[my_token_account]), adapter)
+# value_moves: [SPL:… 1000000 my_acct -> (outflow)]
+# authority_grants: [delegate none -> <attacker> (drain risk)]
+```
+
+This is the only adapter that uses the network — there is no local way to know a
+transaction's on-chain effect. The RPC call is injectable for offline testing,
+and the default uses `urllib` only. See [`examples/solana_drain.py`](examples/solana_drain.py).
 
 ## CLI
 

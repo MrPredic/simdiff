@@ -8,7 +8,9 @@ First release.
   resource use) with fail-closed `safe` semantics.
 - Adapters: `FilesystemAdapter` (shadow-copy diff with content hashing),
   `SqlAdapter` (savepoint + rollback), `ShellAdapter` (safe interpreter, never
-  executes), `HttpAdapter` (egress classification, never sends).
+  executes), `HttpAdapter` (egress classification, never sends), `SolanaAdapter`
+  (RPC `simulateTransaction` + account diff: SOL/token deltas, delegate/owner
+  changes; the one online adapter, injectable RPC, no `solana-py` dependency).
 - `simdiff(action, adapter)` top-level API and a demo CLI with fail-closed exit
   codes.
 - Adversarial benchmark (`python -m bench.run`): on an 18-case obfuscated-effect
