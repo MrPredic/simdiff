@@ -21,8 +21,8 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/SixToNineOG/simdiff"
-Issues = "https://github.com/SixToNineOG/simdiff/issues"
+Homepage = "https://github.com/MrPredic/simdiff"
+Issues = "https://github.com/MrPredic/simdiff/issues"
 
 [project.scripts]
 simdiff = "simdiff.cli:main"
