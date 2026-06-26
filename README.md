@@ -6,7 +6,7 @@ your policy engine decide on that instead of on the raw tool call.
 
 > On an adversarial corpus of obfuscated-effect attacks, deciding over the
 > **simulated effect catches 100%** of them at **0% false positives** — while
-> keyword/argument scanning catches **25%**. ([reproduce](#benchmark): `python -m bench.run`)
+> keyword/argument scanning catches **27%**. ([reproduce](#benchmark): `python -m bench.run`)
 
 ```python
 from simdiff import simdiff
@@ -87,9 +87,10 @@ CanonicalDelta
 | `FilesystemAdapter(sandbox)` | a callable `action(root)` | runs it on a **shadow copy**, diffs before/after | works on a tempdir copy |
 | `SqlAdapter(connection)` | a SQL statement | runs inside `SAVEPOINT … ROLLBACK` | always rolls back |
 | `ShellAdapter(existing=…)` | a command line | **interprets** `rm`/`mv`/`cp`/`mkdir`/`touch`/`chmod`/redirects | never executes |
+| `HttpAdapter(allowed_hosts=…)` | an `HttpRequest` | classifies **egress** (bytes leaving for a non-allowed host) | never sends |
 
 Adding a domain = implement two methods (`simulate`, `extract_delta`). A Solana
-`simulateTransaction` adapter and an HTTP adapter are natural next steps.
+`simulateTransaction` adapter (real lamport/token deltas) is a natural next step.
 
 ## CLI
 
@@ -107,21 +108,24 @@ Why "decide over the effect, not the request" is not just a slogan:
 
 ```
 $ python -m bench.run
-corpus: 14 cases (8 dangerous, 6 safe)
+corpus: 18 cases (11 dangerous, 7 safe)
 
 approach                  recall   false positives
 --------------------------------------------------
 effect simulation (simdiff)      100%                0%
-keyword/arg scanning         25%                0%
+keyword/arg scanning         27%                0%
 ```
 
-The corpus pits the same destructive effect against argument obfuscation:
+The corpus pits the same dangerous effect against argument obfuscation:
 deletion expressed as `mv prod.db /dev/null`, `DROP/**/TABLE` split by a SQL
 comment, permission widening via symbolic `chmod u=rwx,go=rwx`, destruction
-through an uninterpreted tool (`find … -delete`, caught **fail-closed**). Each
-preserves the effect while changing the surface text, so keyword scanning waves
-it through and effect simulation does not. The baseline is a *reasonable*,
-case-insensitive denylist — not a strawman; its weakness is structural.
+through an uninterpreted tool (`find … -delete`, caught **fail-closed**), and a
+secret exfiltrated as a **base64** body or a query parameter — invisible to
+payload scanning, but the destination host gives it away. Each preserves the
+effect while changing the surface text, so keyword scanning waves it through and
+effect simulation does not. The baseline is a *reasonable*, case-insensitive
+denylist (it even greps for plaintext key markers) — not a strawman; its
+weakness is structural.
 
 These numbers are asserted in [`tests/test_benchmark.py`](tests/test_benchmark.py),
 so the claim cannot drift from the code. See [`bench/corpus.py`](bench/corpus.py)

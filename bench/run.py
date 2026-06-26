@@ -12,17 +12,23 @@ import sqlite3
 from typing import Dict
 
 from simdiff import simdiff
+from simdiff.adapters.http import HttpAdapter
 from simdiff.adapters.shell import ShellAdapter
 from simdiff.adapters.sql import SqlAdapter
 
 from .baseline import keyword_flag
-from .corpus import CASES, Case
+from .corpus import CASES, Case, _kw_text
 from .policy import effect_flag
 
 
 def _simdiff_flag(case: Case) -> bool:
     if case.domain == "shell":
         delta = simdiff(case.action, ShellAdapter(existing=case.existing))
+    elif case.domain == "http":
+        delta = simdiff(
+            case.action,
+            HttpAdapter(allowed_hosts=case.allowed_hosts, sensitive_markers=case.sensitive_markers),
+        )
     elif case.domain == "sql":
         conn = sqlite3.connect(":memory:")
         try:
@@ -32,7 +38,7 @@ def _simdiff_flag(case: Case) -> bool:
             delta = simdiff(case.action, SqlAdapter(conn))
         finally:
             conn.close()
-    else:  # pragma: no cover - corpus is shell/sql only
+    else:  # pragma: no cover
         raise ValueError(case.domain)
     return effect_flag(delta, case.protected)
 
@@ -49,7 +55,7 @@ def run() -> Dict:
     sd_pred, kw_pred = [], []
     for case in CASES:
         sd_pred.append((_simdiff_flag(case), case.label))
-        kw_pred.append((keyword_flag(case.action), case.label))
+        kw_pred.append((keyword_flag(_kw_text(case.action)), case.label))
     return {
         "simdiff": _score(sd_pred),
         "keyword": _score(kw_pred),
@@ -74,7 +80,7 @@ def main() -> None:
     print("Per-case (technique -> caught by simdiff / by keyword):")
     for case in CASES:
         sd = _simdiff_flag(case)
-        kw = keyword_flag(case.action)
+        kw = keyword_flag(_kw_text(case.action))
         mark = lambda b: "✓" if b else "·"  # noqa: E731
         flag = " " if case.label == "safe" else "!"
         print(f"  {flag} {case.id:<26} sd:{mark(sd)} kw:{mark(kw)}  {case.technique}")

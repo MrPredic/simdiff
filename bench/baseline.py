@@ -20,6 +20,9 @@ _DENYLIST = [
     r"\bmkfs\b",
     r">\s*/dev/sd",            # overwrite a block device
     r":\(\)\s*\{",             # fork bomb
+    r"BEGIN\s+(?:RSA\s+|PGP\s+)?PRIVATE\s+KEY",  # plaintext private key in payload
+    r"\bAKIA[0-9A-Z]{16}\b",   # plaintext AWS key id
+    r"\bghp_[A-Za-z0-9]{20,}\b",  # plaintext GitHub token
 ]
 _PATTERNS = [re.compile(p, re.IGNORECASE) for p in _DENYLIST]
 
