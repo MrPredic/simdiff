@@ -30,6 +30,12 @@ __version__ = "0.2.0"
 
 
 def simdiff(action: Any, adapter: Any, *, principal: Optional[str] = None) -> CanonicalDelta:
-    """Simulate ``action`` with ``adapter`` and return its canonical effect delta."""
+    """Run ``action`` through ``adapter`` and return its canonical effect delta.
+
+    Depending on the adapter this either simulates the action (filesystem, sql,
+    solana) or conservatively interprets it (shell, http). The returned delta's
+    ``fully_classified`` flag reports whether the effect was understood — it is
+    not a safety verdict. See SECURITY.md.
+    """
     effect = adapter.simulate(action)
     return adapter.extract_delta(effect, principal)
