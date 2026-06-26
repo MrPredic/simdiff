@@ -31,12 +31,13 @@ def token_account(amount, delegate=None):
 
 
 def mock_rpc(method, params):
+    tp = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
     if method == "getMultipleAccounts":
-        return {"value": [{"lamports": 2_039_280, "data": token_account(1_000_000, delegate=None)}]}
+        return {"value": [{"lamports": 2_039_280, "owner": tp, "data": token_account(1_000_000, delegate=None)}]}
     if method == "simulateTransaction":
         # after simulation: balance drained AND a delegate installed
         return {"value": {"err": None, "accounts": [
-            {"lamports": 2_039_280, "data": token_account(0, delegate=b"\x09" * 32)}
+            {"lamports": 2_039_280, "owner": tp, "data": token_account(0, delegate=b"\x09" * 32)}
         ]}}
     raise AssertionError(method)
 
@@ -45,7 +46,7 @@ if __name__ == "__main__":
     adapter = SolanaAdapter(rpc=mock_rpc)
     delta = simdiff(SolanaTransaction("<base64 tx>", watch=["MyTokenAccount1111111111111111111111111111"]), adapter)
 
-    print("safe:", delta.safe)
+    print("safe:", delta.fully_classified)
     for vm in delta.value_moves:
         print(f"  value  {vm.amount} {vm.asset}  {vm.src} -> {vm.dst}  ({vm.reason})")
     for g in delta.authority_grants:

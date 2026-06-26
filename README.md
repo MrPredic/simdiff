@@ -4,9 +4,11 @@
 canonical, structured **effect delta** — *what would actually change* — and let
 your policy engine decide on that instead of on the raw tool call.
 
-> On an adversarial corpus of obfuscated-effect attacks, deciding over the
-> **simulated effect catches 100%** of them at **0% false positives** — while
-> keyword/argument scanning catches **27%**. ([reproduce](#benchmark): `python -m bench.run`)
+> On a small **illustrative** corpus, deciding over the effect catches every
+> obfuscated attack that argument keyword-matching misses (the constructs change
+> the surface text but not the effect). It demonstrates the *principle*, not
+> production numbers — read [Security model & limitations](#security-model--limitations)
+> before trusting it. ([reproduce](#benchmark): `python -m bench.run`)
 
 ```python
 from simdiff import simdiff
@@ -15,7 +17,7 @@ from simdiff.adapters.shell import ShellAdapter
 delta = simdiff("rm important.db", ShellAdapter(existing={"important.db"}))
 print(delta.to_dict())
 # {'data_access': [{'resource': 'important.db', 'mode': 'DELETE', ...}],
-#  'unknown': [], 'safe': True, ...}
+#  'unknown': [], 'fully_classified': True, ...}   # classified != safe: this DELETES the file
 ```
 
 ## Where it sits
@@ -49,28 +51,57 @@ rather than competing with them.
 | AEGIS, OAP, Agent Action Guard | the **call** (extract + scan args) before execution | full firewall |
 | **simdiff** | the **simulated effect** (what would actually change) | a **library / primitive** you feed to any of the above |
 
-The line: everyone else canonicalizes or scans the *request*. simdiff canonicalizes
-the *result of simulating it*. An argument can lie about what it does; a simulated
-effect cannot.
+The line: everyone else canonicalizes or scans the *request*. simdiff reports the
+*effect*. The adapters do this two different ways — be clear which you are using:
+
+- **Simulate (execute & observe):** `filesystem` (runs the action on a shadow
+  copy), `sql` (runs inside a rollback), `solana` (RPC `simulateTransaction`).
+  These see the *real* effect — but they **execute the action**. See the security
+  model below.
+- **Interpret the request (no execution), fail-closed:** `shell`, `http`. These
+  do *not* observe a real effect; they parse what the request would do and refuse
+  to certify anything they can't fully model. They are only trustworthy because
+  they fail closed, not because they simulate.
 
 ## What simdiff is NOT
 
 - Not a policy engine — it returns the effect; **you** (or your firewall) decide.
-- Not a sandbox or a runtime — it never executes the real action.
 - Not a complete agent-security solution — it is one composable building block.
+- `fully_classified` is **not** a safety verdict (see below).
 
 ## Design principles
 
-- **Deterministic & offline** — no LLM, no cloud, no API keys. The four core
-  adapters never touch the network. (The optional Solana adapter is the one
-  exception: only a node can know a transaction's effect, so it calls an RPC
-  endpoint you provide — see below.)
-- **Fail-closed** — anything an adapter cannot classify lands in `unknown`, which
-  makes the whole delta `safe == False`.
-- **No real mutation** — filesystem uses a shadow copy, SQL uses rollback, shell
-  is interpreted, HTTP is parsed, Solana is simulated — none execute/send/broadcast.
+- **Fail-closed** — anything an adapter cannot account for lands in `unknown`,
+  which makes `delta.fully_classified` `False`. Treat that as block/escalate.
+- **`fully_classified` ≠ safe** — it only means the effect was *understood*. A
+  fully-classified delta can still be a destructive `DELETE` or an exfil. The
+  allow/block decision is the consumer's.
+- **Deterministic** — no LLM in the decision path. The `filesystem`, `sql`,
+  `shell`, and `http` adapters are offline; `solana` is the one that needs an RPC.
 - **Zero runtime dependencies** — pure Python standard library (Solana RPC uses
   `urllib`, no `solana-py` needed).
+
+## Security model & limitations
+
+Read this before putting simdiff in front of an agent. It is honest about what it
+does and does not protect.
+
+- **The simulate-adapters execute the action.** `filesystem` runs the supplied
+  callable (it can touch absolute paths, the network, anything — the shadow copy
+  only protects the *sandbox dir*, it is **not** a sandbox). `sql` runs the
+  statement (triggers, `load_extension`, etc. run for real; rollback only undoes
+  row changes). **Run simdiff inside your own isolation (container / VM / seccomp)
+  when the action is untrusted.** simdiff does not sandbox.
+- **`shell`/`http` are conservative parsers, not simulators.** They fail closed on
+  anything unmodelled (pipes, subshells, `$VAR`, globs, fd redirects, unknown
+  commands → `unknown`). That means on real-world command streams they will flag a
+  *lot* (e.g. `git`, `python`, `docker`, any pipe) — by design. Low false-negative,
+  high false-positive. Don't read the benchmark's 0% FP as a real-world number.
+- **`solana` only sees accounts you list in `watch`.** A drain to an account you
+  didn't enumerate is invisible. Pre-state and simulated post-state come from two
+  RPC calls and may be one slot apart.
+- **Policy matching is the consumer's job.** The bundled example policy compares
+  resource names literally — normalize paths/hosts yourself before matching.
 
 ## The effect delta
 
@@ -81,18 +112,18 @@ CanonicalDelta
   data_access[]       CREATE | WRITE | DELETE | READ  (+ bytes)
   resource_use        coarse io / row counts
   unknown[]           unclassifiable effects  ->  fail-closed
-  safe                False iff unknown is non-empty
+  fully_classified    False iff unknown is non-empty (classification, NOT safety)
 ```
 
 ## Adapters
 
-| Adapter | Action | How it simulates | Never mutates because |
+| Adapter | Action | Mechanism | Executes the action? |
 |---|---|---|---|
-| `FilesystemAdapter(sandbox)` | a callable `action(root)` | runs it on a **shadow copy**, diffs before/after | works on a tempdir copy |
-| `SqlAdapter(connection)` | a SQL statement | runs inside `SAVEPOINT … ROLLBACK` | always rolls back |
-| `ShellAdapter(existing=…)` | a command line | **interprets** `rm`/`mv`/`cp`/`mkdir`/`touch`/`chmod`/redirects | never executes |
-| `HttpAdapter(allowed_hosts=…)` | an `HttpRequest` | classifies **egress** (bytes leaving for a non-allowed host) | never sends |
-| `SolanaAdapter(rpc_url=…)` | a `SolanaTransaction` | RPC `simulateTransaction` + account diff → SOL/token deltas, delegate/owner changes | never broadcasts (online) |
+| `FilesystemAdapter(sandbox)` | a callable `action(root)` | runs it on a **shadow copy** of the dir, diffs before/after | **yes** — isolate untrusted actions yourself |
+| `SqlAdapter(connection)` | a SQL statement | runs inside `SAVEPOINT … ROLLBACK` | **yes** — row changes roll back, side effects don't |
+| `ShellAdapter(existing=…)` | a command line | **interprets** `rm`/`mv`/`cp`/`mkdir`/`touch`/`chmod`/redirects; fail-closed on anything else | no |
+| `HttpAdapter(allowed_hosts=…)` | an `HttpRequest` | classifies **egress** (bytes leaving for a non-allowed host) | no — never sends |
+| `SolanaAdapter(rpc_url=…)` | a `SolanaTransaction` | RPC `simulateTransaction` + account diff → SOL/token deltas, delegate/owner changes | no — simulated on a node, never broadcast |
 
 Adding a domain = implement two methods (`simulate`, `extract_delta`).
 
@@ -123,8 +154,9 @@ simdiff shell "rm a.txt && mkdir b" --existing a.txt --json
 simdiff sql   "DELETE FROM users WHERE id = 1" --db app.sqlite
 ```
 
-Exit code is fail-closed: `0` when the delta is safe, `2` otherwise — usable as a
-gate in a pipeline (the real decision still belongs to your policy).
+Exit code reflects **classification, not safety**: `0` when the delta is
+`fully_classified`, `2` otherwise. `0` does **not** mean "allowed" — `rm prod.db`
+exits `0` because it was understood. The allow/block decision belongs to your policy.
 
 ## Benchmark
 
@@ -154,6 +186,15 @@ weakness is structural.
 These numbers are asserted in [`tests/test_benchmark.py`](tests/test_benchmark.py),
 so the claim cannot drift from the code. See [`bench/corpus.py`](bench/corpus.py)
 for every case.
+
+**Honest caveats:** this is a small, hand-built corpus that I wrote — it
+illustrates *that effect-deciding beats text-matching on obfuscation*, it is not a
+general benchmark against production firewalls (which do far more than keyword
+denylisting). The **0% false-positive figure is corpus-specific**: the safe cases
+use only commands the shell adapter models. On real command streams the adapter
+fail-closes on most input (`git`, `python`, pipes, …), so real-world false
+positives are *high*, not zero. The signal to take away is the *direction*, not
+the percentages.
 
 ## Install
 

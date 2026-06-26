@@ -1,6 +1,11 @@
 # simdiff — Design
 
-**Date:** 2026-06-25 · **Status:** approved, building
+**Date:** 2026-06-25 · **Status:** historical design snapshot
+
+> Note: this is the original design. Since 0.2.0 the `safe` field is named
+> `fully_classified` (it reports classification, not a safety verdict), and the
+> `shell`/`http` adapters fail closed on anything unmodelled. See README +
+> SECURITY.md for current behavior.
 
 ## Problem
 

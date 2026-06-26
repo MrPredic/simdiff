@@ -50,9 +50,9 @@ class HttpAdapter:
             return CanonicalDelta()  # allowed egress, nothing to flag
 
         header_bytes = sum(len(str(v)) for v in effect.headers.values())
-        egress_bytes = len(effect.body) + len(parsed.query) + header_bytes
+        egress_bytes = len(effect.body) + len(parsed.path) + len(parsed.query) + header_bytes
 
-        carried = effect.body + parsed.query + "".join(str(v) for v in effect.headers.values())
+        carried = effect.body + parsed.path + parsed.query + "".join(str(v) for v in effect.headers.values())
         hits = [m for m in self.sensitive_markers if m in carried]
         reason = f"data egress to external host {host}"
         if hits:

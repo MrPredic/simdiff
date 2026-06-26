@@ -16,7 +16,7 @@ def test_create_file_is_data_access_create(tmp_path):
         _write(os.path.join(root, "new.txt"), "hello")
 
     delta = simdiff(action, adapter)
-    assert delta.safe is True
+    assert delta.fully_classified is True
     creates = [d for d in delta.data_access if d.resource == "new.txt"]
     assert len(creates) == 1
     assert creates[0].mode == "CREATE"
@@ -109,5 +109,5 @@ def test_action_that_raises_is_fail_closed(tmp_path):
         raise RuntimeError("boom")
 
     delta = simdiff(action, adapter)
-    assert delta.safe is False
+    assert delta.fully_classified is False
     assert any("boom" in u for u in delta.unknown)

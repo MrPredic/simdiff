@@ -17,7 +17,7 @@ from simdiff.delta import CanonicalDelta
 
 
 def effect_flag(delta: CanonicalDelta, protected: Set[str]) -> bool:
-    if not delta.safe:
+    if not delta.fully_classified:
         return True
     if delta.value_moves:
         return True

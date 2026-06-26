@@ -63,8 +63,15 @@ class CanonicalDelta:
     unknown: List[str] = field(default_factory=list)
 
     @property
-    def safe(self) -> bool:
-        """Fail-closed: unclassifiable effects make the delta unsafe."""
+    def fully_classified(self) -> bool:
+        """True iff every part of the effect was understood (``unknown`` is empty).
+
+        IMPORTANT: this is NOT a safety verdict. ``fully_classified is True`` only
+        means simdiff could account for the whole effect — the effect itself may be
+        a destructive ``DELETE`` or an exfil. Deciding whether the effect is
+        *allowed* is the consumer's job. Treat ``fully_classified is False`` as
+        fail-closed (escalate / block), never as "safe".
+        """
         return not self.unknown
 
     def merge(self, other: "CanonicalDelta") -> "CanonicalDelta":
@@ -87,5 +94,5 @@ class CanonicalDelta:
             "data_access": [asdict(d) for d in self.data_access],
             "resource_use": asdict(self.resource_use),
             "unknown": list(self.unknown),
-            "safe": self.safe,
+            "fully_classified": self.fully_classified,
         }

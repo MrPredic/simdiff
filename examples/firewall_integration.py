@@ -13,7 +13,7 @@ from simdiff.adapters.shell import ShellAdapter
 
 def policy_decision(delta) -> str:
     """A toy policy: block deletes outside /tmp, fail closed on unknowns."""
-    if not delta.safe:
+    if not delta.fully_classified:
         return "BLOCK"  # something could not be classified
     for access in delta.data_access:
         if access.mode == "DELETE" and not access.resource.startswith("tmp/"):

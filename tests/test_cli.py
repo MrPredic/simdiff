@@ -8,7 +8,7 @@ def test_shell_safe_command_exits_zero(capsys):
     out = capsys.readouterr().out
     payload = json.loads(out)
     assert code == 0
-    assert payload["safe"] is True
+    assert payload["fully_classified"] is True
     resources = {d["resource"] for d in payload["data_access"]}
     assert {"a.txt", "b"} <= resources
 
@@ -17,7 +17,7 @@ def test_shell_unknown_command_exits_two(capsys):
     code = main(["shell", "frobnicate /etc", "--json"])
     payload = json.loads(capsys.readouterr().out)
     assert code == 2
-    assert payload["safe"] is False
+    assert payload["fully_classified"] is False
 
 
 def test_sql_insert_human_output(capsys, tmp_path):

@@ -23,7 +23,7 @@ from .adapters.sql import SqlAdapter
 
 
 def _render_human(delta: CanonicalDelta) -> str:
-    lines = [f"safe: {delta.safe}"]
+    lines = [f"fully_classified: {delta.fully_classified}  (classification only, NOT a safety verdict)"]
     for d in delta.data_access:
         lines.append(f"  data  {d.mode:6} {d.resource}  ({d.reason})")
     for g in delta.authority_grants:
@@ -60,7 +60,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     delta = _build(args)
     output = json.dumps(delta.to_dict(), indent=2) if args.json else _render_human(delta)
     print(output)
-    return 0 if delta.safe else 2
+    return 0 if delta.fully_classified else 2
 
 
 if __name__ == "__main__":

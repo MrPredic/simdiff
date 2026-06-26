@@ -23,7 +23,7 @@ def test_insert_is_write_and_db_unchanged(conn):
     adapter = SqlAdapter(conn)
     delta = simdiff("INSERT INTO users (name) VALUES ('d')", adapter)
 
-    assert delta.safe is True
+    assert delta.fully_classified is True
     wr = [d for d in delta.data_access if d.resource == "users"]
     assert wr[0].mode == "WRITE"
     assert delta.resource_use.rows == 1
@@ -52,7 +52,7 @@ def test_update_is_write(conn):
 def test_select_is_read_only(conn):
     adapter = SqlAdapter(conn)
     delta = simdiff("SELECT * FROM users", adapter)
-    assert delta.safe is True
+    assert delta.fully_classified is True
     modes = {d.mode for d in delta.data_access}
     assert modes <= {"READ"}
     assert all(d.mode != "WRITE" for d in delta.data_access)
@@ -61,12 +61,12 @@ def test_select_is_read_only(conn):
 def test_unsupported_statement_is_fail_closed(conn):
     adapter = SqlAdapter(conn)
     delta = simdiff("VACUUM", adapter)
-    assert delta.safe is False
+    assert delta.fully_classified is False
     assert delta.unknown
 
 
 def test_syntax_error_is_fail_closed(conn):
     adapter = SqlAdapter(conn)
     delta = simdiff("INSERT INTO nope_table_xyz VALUES (1)", adapter)
-    assert delta.safe is False
+    assert delta.fully_classified is False
     assert _count(conn) == 3

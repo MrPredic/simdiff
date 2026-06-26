@@ -29,6 +29,11 @@ from ..delta import AuthorityGrant, CanonicalDelta, ValueMove
 _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 _LAMPORTS_PER_SOL = 1_000_000_000
 _TOKEN_ACCOUNT_LEN = 165
+# only accounts owned by a token program are parsed with the SPL token layout
+_TOKEN_PROGRAMS = {
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+}
 
 
 def _b58encode(b: bytes) -> str:
@@ -109,6 +114,11 @@ class SolanaAdapter:
             return CanonicalDelta(unknown=[f"transaction simulation failed: {effect.sim_err}"])
         if effect.pre is None or effect.post is None:
             return CanonicalDelta(unknown=["simulation returned no account state to compare"])
+        n = len(effect.watch)
+        if len(effect.pre) != n or len(effect.post) != n:
+            return CanonicalDelta(unknown=[
+                f"account count mismatch (watched {n}, pre {len(effect.pre)}, post {len(effect.post)})"
+            ])
 
         delta = CanonicalDelta()
         for addr, pre_acc, post_acc in zip(effect.watch, effect.pre, effect.post):
@@ -140,8 +150,10 @@ class SolanaAdapter:
                           reason=f"{-d_lamports} lamports enter {addr}")
             )
 
+        # only interpret SPL token layout when a token program actually owns the account
+        owned_by_token = pre_acc.get("owner") in _TOKEN_PROGRAMS or post_acc.get("owner") in _TOKEN_PROGRAMS
         pre_d, post_d = self._data_bytes(pre_acc), self._data_bytes(post_acc)
-        if len(pre_d) >= _TOKEN_ACCOUNT_LEN and len(post_d) >= _TOKEN_ACCOUNT_LEN:
+        if owned_by_token and len(pre_d) >= _TOKEN_ACCOUNT_LEN and len(post_d) >= _TOKEN_ACCOUNT_LEN:
             self._diff_token_account(addr, pre_d, post_d, delta)
 
     @staticmethod

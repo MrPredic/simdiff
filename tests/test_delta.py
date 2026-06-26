@@ -8,20 +8,20 @@ from simdiff.delta import (
 
 def test_empty_delta_is_safe():
     d = CanonicalDelta()
-    assert d.safe is True
+    assert d.fully_classified is True
     assert d.unknown == []
 
 
 def test_delta_with_unknown_is_unsafe():
     d = CanonicalDelta(unknown=["could not parse: frobnicate /etc"])
-    assert d.safe is False
+    assert d.fully_classified is False
 
 
 def test_data_access_recorded():
     d = CanonicalDelta(
         data_access=[DataAccess(resource="/tmp/x", mode="WRITE", bytes=12, reason="wrote 12 bytes")]
     )
-    assert d.safe is True
+    assert d.fully_classified is True
     assert d.data_access[0].mode == "WRITE"
     assert d.data_access[0].bytes == 12
 
@@ -34,7 +34,7 @@ def test_to_dict_roundtrip():
         unknown=["mystery"],
     )
     out = d.to_dict()
-    assert out["safe"] is False
+    assert out["fully_classified"] is False
     assert out["value_moves"][0]["asset"] == "SOL"
     assert out["authority_grants"][0]["new"] == "0777"
     assert out["data_access"][0]["mode"] == "DELETE"
@@ -47,4 +47,4 @@ def test_merge_combines_entries_and_fails_closed():
     merged = a.merge(b)
     assert len(merged.data_access) == 1
     assert merged.unknown == ["x"]
-    assert merged.safe is False
+    assert merged.fully_classified is False

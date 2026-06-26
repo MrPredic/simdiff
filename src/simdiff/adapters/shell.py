@@ -1,14 +1,20 @@
-"""Shell adapter: a *safe interpreter* for common mutating commands.
+"""Shell adapter: a *conservative* safe interpreter for common mutating commands.
 
-It never executes anything. It parses a command line and resolves the file
-effects of a known set of commands (``rm``, ``rmdir``, ``mv``, ``cp``, ``mkdir``,
-``touch``, ``chmod`` and ``>``/``>>`` redirects) against a snapshot of which
-paths currently exist. Any command it does not understand is fail-closed
-(recorded in ``unknown``), so an attacker cannot smuggle effects past it.
+It never executes anything. It models a small, explicit set of commands
+(``rm``, ``rmdir``, ``mv``, ``cp``, ``mkdir``, ``touch``, ``chmod`` and
+``>``/``>>`` redirects) with **literal** arguments. Anything it cannot fully
+account for — a pipe, a subshell, a variable or command substitution, a glob, an
+fd redirection, backticks, backgrounding, unbalanced quotes, or an unknown
+command — is **fail-closed**: it goes into ``unknown`` and makes the delta not
+``fully_classified``. It must never pass an unmodelled construct silently.
+
+This is an interpreter of the request, not a simulation of the effect. It is only
+trustworthy because it refuses to certify anything it does not fully understand.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 from typing import Iterable, List, Optional, Set, Tuple
@@ -17,22 +23,41 @@ from ..delta import AuthorityGrant, CanonicalDelta, DataAccess
 
 # commands that produce no effect on their own (only via a redirect)
 _PRODUCERS = {"echo", "printf", "cat", "true", ":", "head", "tail"}
+
+# split a command line into the individual commands we will look at
 _SPLIT_RE = re.compile(r"\s*(?:&&|\|\||;|\n)\s*")
+
+# shell metacharacters whose effect we do NOT model -> force fail-closed.
+# (``&&``/``||``/``;`` are already removed by the split above, so a leftover
+# ``|`` is a pipe and a leftover ``&`` is backgrounding.)
+_UNMODELLED = re.compile(r"[|&$`<*?~]|[0-9]>|&>")
+
+
+def _norm(path: str) -> str:
+    return os.path.normpath(path)
 
 
 class ShellAdapter:
     domain = "shell"
 
     def __init__(self, existing: Optional[Iterable[str]] = None):
-        self.existing: Set[str] = set(existing or ())
+        self.existing: Set[str] = {_norm(p) for p in (existing or ())}
 
-    def simulate(self, action: str) -> List[List[str]]:
-        # "simulation" is purely lexical: split into individual commands.
-        return [shlex.split(cmd) for cmd in _SPLIT_RE.split(action.strip()) if cmd.strip()]
+    def simulate(self, action: str) -> List[str]:
+        # "simulation" is purely lexical: split into raw command segments.
+        return [seg for seg in _SPLIT_RE.split((action or "").strip()) if seg.strip()]
 
-    def extract_delta(self, effect: List[List[str]], principal: Optional[str] = None) -> CanonicalDelta:
+    def extract_delta(self, effect: List[str], principal: Optional[str] = None) -> CanonicalDelta:
         delta = CanonicalDelta()
-        for tokens in effect:
+        for segment in effect:
+            if _UNMODELLED.search(segment):
+                delta.unknown.append(f"unmodelled shell construct, cannot certify: {segment!r}")
+                continue
+            try:
+                tokens = shlex.split(segment)
+            except ValueError as exc:
+                delta.unknown.append(f"unparseable command ({exc}): {segment!r}")
+                continue
             self._apply(tokens, delta)
         return delta
 
@@ -43,21 +68,20 @@ class ShellAdapter:
             return
         tokens, redirects = self._strip_redirects(tokens)
         for target, append in redirects:
-            mode = "WRITE" if (append or target in self.existing) else "CREATE"
-            delta.data_access.append(
-                DataAccess(resource=target, mode=mode, reason="shell redirect")
-            )
+            t = _norm(target)
+            mode = "WRITE" if (append or t in self.existing) else "CREATE"
+            delta.data_access.append(DataAccess(resource=t, mode=mode, reason="shell redirect"))
         if not tokens:
             return
 
-        verb, args = tokens[0], [a for a in tokens[1:] if not a.startswith("-")]
+        verb, args = tokens[0], [_norm(a) for a in tokens[1:] if not a.startswith("-")]
         handler = getattr(self, f"_cmd_{verb}", None)
         if handler is not None:
             handler(args, delta)
         elif verb in _PRODUCERS:
             return  # effect, if any, was via redirect
         else:
-            delta.unknown.append(f"unknown command: {verb}")
+            delta.unknown.append(f"unknown command, cannot certify: {verb}")
 
     @staticmethod
     def _strip_redirects(tokens: List[str]) -> Tuple[List[str], List[Tuple[str, bool]]]:

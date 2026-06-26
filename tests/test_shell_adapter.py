@@ -5,7 +5,7 @@ from simdiff.adapters.shell import ShellAdapter
 def test_rm_existing_file_is_delete():
     adapter = ShellAdapter(existing={"old.txt"})
     delta = simdiff("rm old.txt", adapter)
-    assert delta.safe is True
+    assert delta.fully_classified is True
     assert delta.data_access[0].resource == "old.txt"
     assert delta.data_access[0].mode == "DELETE"
 
@@ -42,7 +42,7 @@ def test_redirect_is_write():
 def test_unknown_command_is_fail_closed():
     adapter = ShellAdapter()
     delta = simdiff("frobnicate --all /etc", adapter)
-    assert delta.safe is False
+    assert delta.fully_classified is False
     assert any("frobnicate" in u for u in delta.unknown)
 
 
@@ -57,5 +57,5 @@ def test_rm_nonexistent_is_noop():
     adapter = ShellAdapter(existing=set())
     delta = simdiff("rm ghost.txt", adapter)
     # nothing to delete; still safe, no spurious data access
-    assert delta.safe is True
+    assert delta.fully_classified is True
     assert delta.data_access == []
