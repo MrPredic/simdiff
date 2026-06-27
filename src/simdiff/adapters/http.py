@@ -33,7 +33,9 @@ class HttpAdapter:
     domain = "http"
 
     def __init__(self, allowed_hosts: Optional[Set[str]] = None, sensitive_markers: Optional[Set[str]] = None):
-        self.allowed_hosts: Set[str] = set(allowed_hosts or ())
+        # hostnames are case-insensitive; urlparse lower-cases the request host,
+        # so the allowlist is normalised the same way to avoid over-blocking.
+        self.allowed_hosts: Set[str] = {h.lower() for h in (allowed_hosts or ())}
         self.sensitive_markers: Set[str] = set(sensitive_markers or ())
 
     def simulate(self, action: HttpRequest) -> HttpRequest:
@@ -42,7 +44,7 @@ class HttpAdapter:
 
     def extract_delta(self, effect: HttpRequest, principal: Optional[str] = None) -> CanonicalDelta:
         parsed = urlparse(effect.url)
-        host = parsed.hostname
+        host = parsed.hostname  # urlparse already lower-cases this
         if not host or " " in effect.url.strip():
             return CanonicalDelta(unknown=[f"could not parse a destination host from URL: {effect.url!r}"])
 

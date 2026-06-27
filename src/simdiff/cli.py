@@ -3,9 +3,11 @@
     simdiff shell "<command line>" [--existing a,b,c] [--json]
     simdiff sql   "<statement>" --db path.sqlite [--json]
 
-Exit code is fail-closed: 0 when the delta is safe (everything classified),
-2 when it is not. This makes simdiff usable as a gate in a shell pipeline,
-though the real decision belongs to a policy engine consuming the JSON.
+Exit code is fail-closed: 0 when the effect was fully classified, 2 when
+something could not be (``unknown``). This is a classification gate, NOT a safety
+verdict -- a fully-classified delta can still be a destructive delete or an
+exfil. The real allow/block decision belongs to a policy engine consuming the
+JSON.
 """
 
 from __future__ import annotations

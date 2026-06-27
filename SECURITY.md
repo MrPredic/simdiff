@@ -31,9 +31,21 @@ properties before relying on it.
   conservative and fail closed on anything unmodelled, so they tend to produce
   many false positives on real workloads — that is the intended trade-off, but it
   is not zero-false-positive in practice.
+- **The `shell` adapter drops flags it does not model.** Flags that take a value
+  and *invert* operands (`cp -t DIR` / `mv -t DIR`) are detected and fail closed.
+  Other value-taking flags (`mkdir -m MODE`, `touch -r REF`) are dropped, which can
+  add a spurious operand to the delta (a false positive, never a hidden effect).
+- **The `shell` adapter trusts `existing` as ground truth.** A `DELETE`/`mv`-source
+  on a path you did not list in `existing` is treated as a no-op (the file is
+  assumed not to exist), so it produces no delta and stays `fully_classified`.
+  If `existing` is incomplete relative to the real filesystem, a real deletion can
+  be invisible. **Mitigation:** populate `existing` from the actual sandbox listing,
+  not a guess.
 - **`solana` only inspects accounts you pass in `watch`.** Effects on accounts you
-  did not enumerate are invisible. Pre- and post-state come from two RPC calls and
-  may be a slot apart.
+  did not enumerate are invisible. An *empty* `watch` fails closed (it certifies
+  nothing), but a non-empty-but-incomplete `watch` does not — list every account
+  the transaction can touch. Pre- and post-state come from two RPC calls and may
+  be a slot apart.
 
 ## Reporting a vulnerability
 

@@ -29,8 +29,18 @@ _SPLIT_RE = re.compile(r"\s*(?:&&|\|\||;|\n)\s*")
 
 # shell metacharacters whose effect we do NOT model -> force fail-closed.
 # (``&&``/``||``/``;`` are already removed by the split above, so a leftover
-# ``|`` is a pipe and a leftover ``&`` is backgrounding.)
-_UNMODELLED = re.compile(r"[|&$`<*?~]|[0-9]>|&>")
+# ``|`` is a pipe and a leftover ``&`` is backgrounding.) ``[ ]`` are bracket
+# (character-class) globs and ``{ }`` are brace expansion -- both expand to a
+# fileset we cannot enumerate, so they fail closed exactly like ``* ? ~``.
+#
+# Output redirects are only modelled when ``>`` / ``>>`` appear as their own
+# whitespace-delimited tokens (``cmd > file``). A redirect *glued* to text
+# (``cmd>file``, ``cmd>>file``, ``2>file``, ``&>file``) is valid bash but cannot
+# be tokenised by ``shlex`` here, so it must fail closed rather than silently
+# vanish: ``[^\s>]>`` is a ``>`` with a non-space char before it, ``>[^\s>]`` a
+# ``>`` with a non-space, non-``>`` char after it. Clean ``a > b`` and ``a >> b``
+# match neither.
+_UNMODELLED = re.compile(r"[|&$`<*?~{}\[\]]|[^\s>]>|>[^\s>]")
 
 
 def _norm(path: str) -> str:
@@ -74,7 +84,20 @@ class ShellAdapter:
         if not tokens:
             return
 
-        verb, args = tokens[0], [_norm(a) for a in tokens[1:] if not a.startswith("-")]
+        verb = tokens[0]
+        # `cp -t DIR file` / `mv -t DIR file` copy INTO DIR; the flag takes a value
+        # and inverts source/destination. Dropping it would hide the write to DIR,
+        # so fail closed rather than misclassify. ``t`` is the only short flag cp/mv
+        # spell with a lowercase ``t``, so any short-flag group containing it (``-t``,
+        # ``-rt``, ``-vt`` ...) means target-directory; ``--target-directory=DIR`` is
+        # a single token caught downstream by the arg-count check.
+        if verb in ("cp", "mv") and any(
+            a.startswith("-") and not a.startswith("--") and "t" in a[1:] for a in tokens[1:]
+        ):
+            delta.unknown.append(f"unmodelled flag (-t takes a value, inverts operands): {verb}")
+            return
+
+        args = [_norm(a) for a in tokens[1:] if not a.startswith("-")]
         handler = getattr(self, f"_cmd_{verb}", None)
         if handler is not None:
             handler(args, delta)
@@ -118,9 +141,10 @@ class ShellAdapter:
         if len(args) < 2:
             delta.unknown.append("mv: could not parse source/destination")
             return
-        src, dst = args[0], args[-1]
-        if src in self.existing:
-            delta.data_access.append(DataAccess(resource=src, mode="DELETE", reason="mv source"))
+        *srcs, dst = args  # `mv a b c dir` moves every source into the last operand
+        for src in srcs:
+            if src in self.existing:
+                delta.data_access.append(DataAccess(resource=src, mode="DELETE", reason="mv source"))
         mode = "WRITE" if dst in self.existing else "CREATE"
         delta.data_access.append(DataAccess(resource=dst, mode=mode, reason="mv destination"))
 
@@ -128,8 +152,9 @@ class ShellAdapter:
         if len(args) < 2:
             delta.unknown.append("cp: could not parse source/destination")
             return
-        src, dst = args[0], args[-1]
-        delta.data_access.append(DataAccess(resource=src, mode="READ", reason="cp source"))
+        *srcs, dst = args  # `cp a b c dir` copies every source into the last operand
+        for src in srcs:
+            delta.data_access.append(DataAccess(resource=src, mode="READ", reason="cp source"))
         mode = "WRITE" if dst in self.existing else "CREATE"
         delta.data_access.append(DataAccess(resource=dst, mode=mode, reason="cp destination"))
 

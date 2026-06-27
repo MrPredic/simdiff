@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.2.1
+
+Hardening release after a second, fresh-eyes critical review. No API changes.
+
+- **Security fix (filesystem):** snapshotting is no longer crash- or hang-prone.
+  An action that created a dangling symlink made `simulate()` raise (instead of
+  failing closed), and an action that created a FIFO/special file made the snapshot
+  **block forever** on `open()`. Snapshots now use `lstat` (never follow links) and
+  only hash regular files; symlinks/FIFOs/sockets/devices are reported as
+  `unknown` (fail closed), and any snapshot error fails closed instead of raising.
+- **Security fix (shell):** bracket globs (`[...]`) and brace expansion (`{...}`)
+  now fail closed like `*`/`?`/`~`. Previously `rm secret[0-9].key` and
+  `rm {a,b}.key` slipped through as fully classified with no effect.
+- **Security fix (shell):** a redirect *glued* to its target (`cmd>file`,
+  `cmd>>file`) is valid bash but could not be tokenised, so it used to vanish
+  silently; it now fails closed. Properly spaced `cmd > file` still parses.
+- **Security fix (shell):** `cp`/`mv` now account for every source operand
+  (`mv a b c dir` no longer drops the deletion of `b` and `c`), and `cp -t DIR` /
+  `mv -t DIR` (which copy *into* DIR and would otherwise be misread as a write to
+  the last file) fail closed.
+- **Fix (http):** the egress allowlist is now compared case-insensitively
+  (hostnames are case-insensitive; legit egress to `API.Internal` is no longer
+  flagged just because the allowlist case differs).
+- **Hardening (sql):** counting a `SELECT` result no longer materialises every
+  row in memory (`fetchall()` → streamed count), removing a memory-exhaustion
+  vector when simulating a `SELECT *` on a large table.
+- **Security fix (solana):** an empty `watch` list now fails closed
+  (`"no accounts watched; cannot certify"`) instead of returning an empty,
+  fully-classified delta — "inspected nothing" is no longer reported as "safe".
+  The RPC is skipped entirely when nothing is watched.
+- **Docs (SECURITY.md):** documented that the `shell` adapter trusts `existing` as
+  ground truth (a delete of an unlisted path is a no-op), and clarified the
+  `solana` `watch` semantics.
+
 ## 0.2.0
 
 Hardening release after a critical self-review. **Breaking.**

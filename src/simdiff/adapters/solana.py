@@ -83,6 +83,10 @@ class SolanaAdapter:
         self._rpc = rpc or _default_rpc(rpc_url)  # type: ignore[arg-type]
 
     def simulate(self, action: SolanaTransaction) -> _SolEffect:
+        if not action.watch:
+            # No accounts to compare. Inspecting nothing must never certify a
+            # transaction; skip the RPC and fail closed in extract_delta.
+            return _SolEffect(watch=[])
         try:
             pre = self._rpc("getMultipleAccounts", [action.watch, {"encoding": "base64"}])
             sim = self._rpc(
@@ -108,6 +112,8 @@ class SolanaAdapter:
         )
 
     def extract_delta(self, effect: _SolEffect, principal: Optional[str] = None) -> CanonicalDelta:
+        if not effect.watch:
+            return CanonicalDelta(unknown=["no accounts watched; cannot certify transaction effect"])
         if effect.error is not None:
             return CanonicalDelta(unknown=[f"solana RPC unavailable: {effect.error}"])
         if effect.sim_err is not None:
@@ -164,12 +170,12 @@ class SolanaAdapter:
         if pre_amt > post_amt:
             delta.value_moves.append(
                 ValueMove(asset=f"SPL:{mint}", src=addr, dst="(outflow)", amount=float(pre_amt - post_amt),
-                          reason="token balance decreases")
+                          reason="token balance decreases (raw base units, not decimal-adjusted)")
             )
         elif post_amt > pre_amt:
             delta.value_moves.append(
                 ValueMove(asset=f"SPL:{mint}", src="(inflow)", dst=addr, amount=float(post_amt - pre_amt),
-                          reason="token balance increases")
+                          reason="token balance increases (raw base units, not decimal-adjusted)")
             )
 
         def delegate(d: bytes) -> str:

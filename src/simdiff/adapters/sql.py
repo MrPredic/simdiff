@@ -62,7 +62,9 @@ class SqlAdapter:
         try:
             cur.execute(action)
             if verb == "SELECT":
-                rows = len(cur.fetchall())
+                # stream the cursor instead of fetchall(): counting a huge result
+                # set must not materialise every row in memory.
+                rows = sum(1 for _ in cur)
             else:
                 rows = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
         except Exception as exc:  # noqa: BLE001 - fail-closed

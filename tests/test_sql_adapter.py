@@ -58,6 +58,12 @@ def test_select_is_read_only(conn):
     assert all(d.mode != "WRITE" for d in delta.data_access)
 
 
+def test_select_reports_row_count(conn):
+    # guard for the streaming row-count refactor: the count must stay exact
+    delta = simdiff("SELECT * FROM users", SqlAdapter(conn))
+    assert delta.resource_use.rows == 3
+
+
 def test_unsupported_statement_is_fail_closed(conn):
     adapter = SqlAdapter(conn)
     delta = simdiff("VACUUM", adapter)
