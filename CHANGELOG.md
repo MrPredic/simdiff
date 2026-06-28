@@ -8,6 +8,12 @@ Hardening release after a second, fresh-eyes critical review. No API changes.
   CI (`--cov-fail-under=100`). This closed previously untested branches, including
   the security-critical solana **owner-reassignment (takeover)** detection, SOL/
   token inflows, null-account RPC responses, and the filesystem fail-closed paths.
+- **Tests:** added property-based / fuzz tests (Hypothesis) pinning the safety
+  invariants across random inputs: the shell parser is total and never certifies a
+  command carrying an unmodelled metachar; sql tolerates arbitrary statements;
+  egress to any non-allow-listed host is always surfaced; the filesystem snapshot
+  survives arbitrary on-disk states (symlinks, FIFOs, chmod) without raising or
+  hanging; and `CanonicalDelta.merge` is a monoid (associative, empty identity).
 
 - **Security fix (filesystem):** snapshotting is no longer crash- or hang-prone.
   An action that created a dangling symlink made `simulate()` raise (instead of
