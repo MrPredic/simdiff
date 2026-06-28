@@ -60,6 +60,19 @@ def test_mv_multiple_sources_into_dir_deletes_each():
     assert deletes == {"a", "b", "c"}
 
 
+def test_mv_skips_nonexistent_source_but_records_others():
+    adapter = ShellAdapter(existing={"a"})
+    delta = simdiff("mv a ghost dest", adapter)
+    deletes = {d.resource for d in delta.data_access if d.mode == "DELETE"}
+    assert deletes == {"a"}  # 'ghost' is not known to exist -> no spurious delete
+
+
+def test_adapters_satisfy_runtime_protocol():
+    from simdiff.adapters.base import Adapter
+
+    assert isinstance(ShellAdapter(), Adapter)
+
+
 def test_cp_multiple_sources_reads_each():
     adapter = ShellAdapter(existing={"a", "b"})
     delta = simdiff("cp a b dest", adapter)
@@ -106,3 +119,27 @@ def test_rm_nonexistent_is_noop():
     # nothing to delete; still safe, no spurious data access
     assert delta.fully_classified is True
     assert delta.data_access == []
+
+
+def test_unbalanced_quote_is_fail_closed():
+    delta = simdiff('echo "unterminated', ShellAdapter())
+    assert delta.fully_classified is False
+    assert delta.unknown
+
+
+def test_redirect_only_command_creates_target():
+    delta = simdiff("> newfile", ShellAdapter())
+    creates = [d for d in delta.data_access if d.resource == "newfile"]
+    assert creates and creates[0].mode == "CREATE"
+
+
+def test_cp_single_arg_is_fail_closed():
+    delta = simdiff("cp onlyone", ShellAdapter())
+    assert delta.fully_classified is False
+    assert any("cp" in u for u in delta.unknown)
+
+
+def test_chmod_single_arg_is_fail_closed():
+    delta = simdiff("chmod 777", ShellAdapter())
+    assert delta.fully_classified is False
+    assert any("chmod" in u for u in delta.unknown)

@@ -74,7 +74,7 @@ class ShellAdapter:
     # --- internals -------------------------------------------------------
 
     def _apply(self, tokens: List[str], delta: CanonicalDelta) -> None:
-        if not tokens:
+        if not tokens:  # pragma: no cover - defensive; callers pass non-empty tokens
             return
         tokens, redirects = self._strip_redirects(tokens)
         for target, append in redirects:

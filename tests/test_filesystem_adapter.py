@@ -111,3 +111,49 @@ def test_action_that_raises_is_fail_closed(tmp_path):
     delta = simdiff(action, adapter)
     assert delta.fully_classified is False
     assert any("boom" in u for u in delta.unknown)
+
+
+def test_nonexistent_sandbox_is_fail_closed(tmp_path):
+    # copytree of a missing source must fail closed, not raise out of simulate()
+    adapter = FilesystemAdapter(str(tmp_path / "does-not-exist"))
+
+    def action(root):
+        pass
+
+    delta = simdiff(action, adapter)
+    assert delta.fully_classified is False
+    assert delta.unknown
+
+
+def test_symlink_retarget_is_fail_closed(tmp_path):
+    sandbox = tmp_path / "box"
+    sandbox.mkdir()
+    _write(str(sandbox / "real1"), "a")
+    _write(str(sandbox / "real2"), "b")
+    os.symlink("real1", sandbox / "link")
+    adapter = FilesystemAdapter(str(sandbox))
+
+    def action(root):
+        p = os.path.join(root, "link")
+        os.remove(p)
+        os.symlink("real2", p)  # retarget the symlink
+
+    delta = simdiff(action, adapter)
+    assert delta.fully_classified is False
+    assert any("special" in u for u in delta.unknown)
+
+
+def test_untouched_symlink_is_not_flagged(tmp_path):
+    # a pre-existing symlink the action never touches must not trip fail-closed
+    sandbox = tmp_path / "box"
+    sandbox.mkdir()
+    _write(str(sandbox / "real"), "a")
+    os.symlink("real", sandbox / "link")
+    adapter = FilesystemAdapter(str(sandbox))
+
+    def action(root):
+        _write(os.path.join(root, "other.txt"), "x")
+
+    delta = simdiff(action, adapter)
+    assert delta.fully_classified is True
+    assert any(d.resource == "other.txt" for d in delta.data_access)

@@ -20,6 +20,34 @@ def test_shell_unknown_command_exits_two(capsys):
     assert payload["fully_classified"] is False
 
 
+def test_render_human_shows_all_effect_kinds():
+    from simdiff.cli import _render_human
+    from simdiff.delta import CanonicalDelta, DataAccess, AuthorityGrant, ValueMove
+
+    delta = CanonicalDelta(
+        data_access=[DataAccess(resource="f", mode="DELETE", reason="r")],
+        authority_grants=[AuthorityGrant(target="f", kind="mode", old="644", new="777", reason="chmod")],
+        value_moves=[ValueMove(asset="SOL", src="a", dst="b", amount=1.0, reason="x")],
+        unknown=["mystery"],
+    )
+    out = _render_human(delta)
+    assert "DELETE" in out
+    assert "auth" in out
+    assert "value" in out
+    assert "UNKNOWN" in out
+
+
+def test_unknown_domain_raises():
+    import argparse
+
+    import pytest
+
+    from simdiff.cli import _build
+
+    with pytest.raises(ValueError):
+        _build(argparse.Namespace(domain="bogus", action="x"))
+
+
 def test_sql_insert_human_output(capsys, tmp_path):
     import sqlite3
 

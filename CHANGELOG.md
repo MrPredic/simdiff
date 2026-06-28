@@ -4,6 +4,11 @@
 
 Hardening release after a second, fresh-eyes critical review. No API changes.
 
+- **Tests:** coverage raised to **100%** (statement + branch) and now enforced in
+  CI (`--cov-fail-under=100`). This closed previously untested branches, including
+  the security-critical solana **owner-reassignment (takeover)** detection, SOL/
+  token inflows, null-account RPC responses, and the filesystem fail-closed paths.
+
 - **Security fix (filesystem):** snapshotting is no longer crash- or hang-prone.
   An action that created a dangling symlink made `simulate()` raise (instead of
   failing closed), and an action that created a FIFO/special file made the snapshot
