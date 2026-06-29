@@ -18,6 +18,12 @@ Hardening release after a second, fresh-eyes critical review. No API changes.
   reported as a harmless read on `"(no table)"`.
 - **Fix (cli):** `--existing "a, b"` (whitespace after the comma) is now trimmed,
   so a real delete of `b` is no longer silently dropped.
+- **Adoptability:** the CLI now covers `http` (`simdiff http <url> --method …
+  --allowed-hosts … --body …`) alongside `shell` and `sql`. Added
+  [`examples/guard_tool_call.py`](examples/guard_tool_call.py), a runnable,
+  framework-agnostic agent-guard loop (simulate → decide over the effect →
+  allow/block/approve), and restructured the README around how you actually wire
+  simdiff into an agent.
 - **Tests:** added property-based / fuzz tests (Hypothesis) pinning the safety
   invariants across random inputs: the shell parser is total and never certifies a
   command carrying an unmodelled metachar; sql tolerates arbitrary statements;

