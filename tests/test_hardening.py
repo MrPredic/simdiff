@@ -178,3 +178,18 @@ def test_solana_empty_watch_is_fail_closed():
     delta = simdiff(SolanaTransaction("AA==", watch=[]), SolanaAdapter(rpc=rpc))
     assert delta.fully_classified is False
     assert delta.unknown
+
+
+def test_solana_empty_watch_skips_the_rpc_entirely():
+    # the guard's distinct job is to not hit the network for a degenerate input;
+    # observe the calls directly (a raised error would be swallowed fail-closed).
+    called = []
+
+    def rpc(method, params):
+        called.append(method)
+        if method == "getMultipleAccounts":
+            return {"value": []}
+        return {"value": {"err": None, "accounts": []}}
+
+    simdiff(SolanaTransaction("AA==", watch=[]), SolanaAdapter(rpc=rpc))
+    assert called == []
