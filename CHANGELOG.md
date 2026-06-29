@@ -19,11 +19,19 @@ Hardening release after a second, fresh-eyes critical review. No API changes.
 - **Fix (cli):** `--existing "a, b"` (whitespace after the comma) is now trimmed,
   so a real delete of `b` is no longer silently dropped.
 - **Adoptability:** the CLI now covers `http` (`simdiff http <url> --method …
-  --allowed-hosts … --body …`) alongside `shell` and `sql`. Added
-  [`examples/guard_tool_call.py`](examples/guard_tool_call.py), a runnable,
-  framework-agnostic agent-guard loop (simulate → decide over the effect →
-  allow/block/approve), and restructured the README around how you actually wire
-  simdiff into an agent.
+  --allowed-hosts … --body …`) alongside `shell` and `sql`. Restructured the
+  README around how you actually wire simdiff into an agent.
+- **New (optional, zero-dep): `simdiff.guard`.** A reference `Guard` that wires
+  *simulate → decide* for many tools at once: register a `{tool: builder}` map and
+  a `policy`, call `guard.evaluate(tool, args) -> GuardResult(decision, delta)`.
+  Fail-closed by construction (unmodeled tool / builder error / adapter crash all
+  resolve to `BLOCK`). Ships with a conservative `default_policy` you can replace.
+- **New integrations / examples:**
+  [`examples/mcp_guard_server.py`](examples/mcp_guard_server.py) — a Model Context
+  Protocol server that guards every tool with simdiff before it runs (one-block
+  client config); and [`examples/guard_tool_call.py`](examples/guard_tool_call.py)
+  — a framework-agnostic guard loop. simdiff's core stays dependency-free; the MCP
+  example uses the MCP SDK only when you run it.
 - **Tests:** added property-based / fuzz tests (Hypothesis) pinning the safety
   invariants across random inputs: the shell parser is total and never certifies a
   command carrying an unmodelled metachar; sql tolerates arbitrary statements;
