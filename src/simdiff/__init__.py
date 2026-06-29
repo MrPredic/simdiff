@@ -36,6 +36,14 @@ def simdiff(action: Any, adapter: Any, *, principal: Optional[str] = None) -> Ca
     solana) or conservatively interprets it (shell, http). The returned delta's
     ``fully_classified`` flag reports whether the effect was understood — it is
     not a safety verdict. See SECURITY.md.
+
+    Any error escaping the adapter (a bug, a ``MemoryError``, ...) is turned into a
+    fail-closed delta rather than propagating: the firewall must never lose its
+    verdict to a crash. ``KeyboardInterrupt``/``SystemExit`` are not caught.
     """
-    effect = adapter.simulate(action)
-    return adapter.extract_delta(effect, principal)
+    domain = getattr(adapter, "domain", type(adapter).__name__)
+    try:
+        effect = adapter.simulate(action)
+        return adapter.extract_delta(effect, principal)
+    except Exception as exc:  # noqa: BLE001 - any adapter failure must fail closed
+        return CanonicalDelta(unknown=[f"adapter error ({domain}): {type(exc).__name__}: {exc}"])

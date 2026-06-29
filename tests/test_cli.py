@@ -37,6 +37,15 @@ def test_render_human_shows_all_effect_kinds():
     assert "UNKNOWN" in out
 
 
+def test_existing_paths_are_whitespace_trimmed(capsys):
+    # `--existing "a.txt, b.txt"` (space after the comma) must still match `b.txt`;
+    # otherwise a real delete silently vanishes from the delta.
+    code = main(["shell", "rm b.txt", "--existing", "a.txt, b.txt", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    deletes = {d["resource"] for d in payload["data_access"] if d["mode"] == "DELETE"}
+    assert "b.txt" in deletes
+
+
 def test_unknown_domain_raises():
     import argparse
 

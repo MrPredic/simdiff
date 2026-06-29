@@ -10,11 +10,44 @@ import signal
 import pytest
 
 from simdiff import simdiff
+from simdiff.delta import CanonicalDelta
 from simdiff.adapters.shell import ShellAdapter
 from simdiff.adapters.http import HttpAdapter, HttpRequest
 from simdiff.adapters.sql import SqlAdapter
 from simdiff.adapters.filesystem import FilesystemAdapter
 from simdiff.adapters.solana import SolanaAdapter, SolanaTransaction
+
+
+# --- top-level: an adapter that raises must not crash the firewall (fail closed) ---
+
+def test_simdiff_top_level_adapter_error_is_fail_closed():
+    class _Boom:
+        domain = "boom"
+
+        def simulate(self, action):
+            raise RuntimeError("adapter blew up")
+
+        def extract_delta(self, effect, principal=None):
+            return CanonicalDelta()
+
+    delta = simdiff("anything", _Boom())
+    assert delta.fully_classified is False
+    assert any("adapter blew up" in u for u in delta.unknown)
+
+
+def test_simdiff_top_level_extract_error_is_fail_closed():
+    class _Boom:
+        domain = "boom"
+
+        def simulate(self, action):
+            return action
+
+        def extract_delta(self, effect, principal=None):
+            raise ValueError("extract exploded")
+
+    delta = simdiff("x", _Boom())
+    assert delta.fully_classified is False
+    assert any("extract exploded" in u for u in delta.unknown)
 
 
 # --- shell: anything not fully modelled must fail closed, never pass silently ---

@@ -8,6 +8,16 @@ Hardening release after a second, fresh-eyes critical review. No API changes.
   CI (`--cov-fail-under=100`). This closed previously untested branches, including
   the security-critical solana **owner-reassignment (takeover)** detection, SOL/
   token inflows, null-account RPC responses, and the filesystem fail-closed paths.
+- **Security fix (core):** `simdiff()` now turns *any* error escaping an adapter
+  (a bug, `MemoryError`, ...) into a fail-closed `unknown` delta instead of letting
+  it propagate and crash the caller — the firewall must never lose its verdict to a
+  crash. (`KeyboardInterrupt`/`SystemExit` still propagate.)
+- **Security fix (sql):** a mutating statement whose target table cannot be
+  identified now fails closed instead of being certified against an
+  `"<unknown-table>"` placeholder; a tableless `SELECT` (e.g. `SELECT 1`) is
+  reported as a harmless read on `"(no table)"`.
+- **Fix (cli):** `--existing "a, b"` (whitespace after the comma) is now trimmed,
+  so a real delete of `b` is no longer silently dropped.
 - **Tests:** added property-based / fuzz tests (Hypothesis) pinning the safety
   invariants across random inputs: the shell parser is total and never certifies a
   command carrying an unmodelled metachar; sql tolerates arbitrary statements;

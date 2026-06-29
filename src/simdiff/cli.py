@@ -39,7 +39,7 @@ def _render_human(delta: CanonicalDelta) -> str:
 
 def _build(args: argparse.Namespace) -> CanonicalDelta:
     if args.domain == "shell":
-        existing = set(args.existing.split(",")) if args.existing else set()
+        existing = {p.strip() for p in args.existing.split(",") if p.strip()} if args.existing else set()
         return simdiff(args.action, ShellAdapter(existing=existing))
     if args.domain == "sql":
         conn = sqlite3.connect(args.db) if args.db else sqlite3.connect(":memory:")

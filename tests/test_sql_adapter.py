@@ -64,6 +64,26 @@ def test_select_reports_row_count(conn):
     assert delta.resource_use.rows == 3
 
 
+def test_tableless_select_is_classified_read(conn):
+    # `SELECT 1` touches no table; it is a harmless read, not an unknown, and must
+    # not be reported with a misleading "<unknown-table>" placeholder.
+    delta = simdiff("SELECT 1", SqlAdapter(conn))
+    assert delta.fully_classified is True
+    assert all(d.mode == "READ" for d in delta.data_access)
+    assert all("<unknown-table>" not in d.resource for d in delta.data_access)
+
+
+def test_unresolved_table_for_a_write_is_fail_closed(conn):
+    # if a mutating statement's target table cannot be identified, the effect must
+    # fail closed rather than be certified against a placeholder table.
+    from simdiff.adapters.sql import _SqlEffect
+
+    adapter = SqlAdapter(conn)
+    delta = adapter.extract_delta(_SqlEffect(verb="DELETE", table=None, rows=3))
+    assert delta.fully_classified is False
+    assert delta.unknown
+
+
 def test_unsupported_statement_is_fail_closed(conn):
     adapter = SqlAdapter(conn)
     delta = simdiff("VACUUM", adapter)

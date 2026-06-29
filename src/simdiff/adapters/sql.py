@@ -80,7 +80,18 @@ class SqlAdapter:
             return CanonicalDelta(unknown=[f"sql simulation failed: {effect.error}"])
 
         mode = _MODE_BY_VERB[effect.verb]
-        resource = effect.table or "<unknown-table>"
+        if effect.table is None:
+            # A mutating statement whose target table we cannot identify must fail
+            # closed — certifying it against a placeholder would hide what is
+            # written. A tableless SELECT (e.g. ``SELECT 1``) touches nothing and
+            # is a harmless read.
+            if mode != "READ":
+                return CanonicalDelta(
+                    unknown=[f"could not identify target table for {effect.verb} statement"]
+                )
+            resource = "(no table)"
+        else:
+            resource = effect.table
         return CanonicalDelta(
             data_access=[
                 DataAccess(
