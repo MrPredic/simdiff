@@ -162,15 +162,19 @@ agent proposes action ─▶ [ simdiff: simulate ▶ effect delta ] ─▶ your 
 ```
 
 The 2026 pre-execution agent firewalls — [AEGIS](https://arxiv.org/abs/2603.12621),
-OAP / Open Agent Passport, Agent Action Guard,
-[*Before the Tool Call*](https://arxiv.org/abs/2603.20953) — all decide **before**
-a tool runs, but they decide over the **request** (tool name + arguments, which
-they scan). simdiff is **not** another firewall; it's the piece they're missing.
+[*Before the Tool Call*](https://arxiv.org/abs/2603.20953),
+[Pipelock](https://github.com/luckyPipewrench/pipelock),
+[Microsoft's Agent Governance Toolkit](https://opensource.microsoft.com/blog/2026/04/02/introducing-the-agent-governance-toolkit-open-source-runtime-security-for-ai-agents/),
+[agent-airlock](https://github.com/sattyamjjain/agent-airlock),
+[Faramesh](https://faramesh.dev/) — all decide **before** a tool runs, but over the
+**request**: scanned arguments, signature/pattern rules, or a policy on the tool
+name. simdiff is **not** another firewall; it's the piece they're missing — the
+*simulated effect*.
 
 | Tool | Decides over | Form |
 |---|---|---|
-| AEGIS, OAP, Agent Action Guard, agent-airlock, Faramesh | the **call** (args, normalized/scanned) | full firewall / control plane |
-| **simdiff** | the **simulated effect** (what would change) | a **library / primitive** you feed them |
+| AEGIS, Pipelock, MS Agent Governance Toolkit, agent-airlock, Faramesh | the **call** (args scanned, signature/pattern rules, policy) | full firewall / control plane |
+| **simdiff** | the **simulated effect** (what would actually change) | a **library / primitive** you feed them |
 
 The adapters get to the effect two ways — know which you're using:
 
