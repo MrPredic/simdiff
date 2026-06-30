@@ -1,0 +1,27 @@
+name: Feature request
+description: A new adapter, integration, or capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What effect can't you currently see / decide on?
+      description: Describe the action whose effect simdiff should model.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - New domain adapter
+        - Integration (MCP / LangChain / framework wrapper)
+        - Core / delta model
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Would it simulate (execute & observe) or interpret (parse, fail-closed)?

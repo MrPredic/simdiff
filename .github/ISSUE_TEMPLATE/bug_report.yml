@@ -1,0 +1,39 @@
+name: Bug report
+description: A correctness, fail-closed, or crash issue in simdiff
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did simdiff report, and what did you expect?
+      placeholder: |
+        `simdiff("...", SomeAdapter(...))` returned `fully_classified=True` but the
+        action actually <does X>.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest snippet (action + adapter setup) that shows it.
+      render: python
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Class of issue
+      options:
+        - Fail-open (an effect is hidden / wrongly classified)
+        - Crash / hang / unbounded resource use
+        - Misclassification (wrong mode/resource/amount)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: simdiff version / commit
+    validations:
+      required: true

@@ -1,5 +1,11 @@
 # simdiff
 
+[![CI](https://github.com/MrPredic/simdiff/actions/workflows/test.yml/badge.svg)](https://github.com/MrPredic/simdiff/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
+[![Dependencies: 0](https://img.shields.io/badge/dependencies-0-success.svg)](pyproject.toml)
+[![Coverage 100%](https://img.shields.io/badge/coverage-100%25-success.svg)](#install)
+
 **Decide what your AI agent's tool calls would *do*, before they run.**
 
 simdiff simulates a proposed action (a shell command, SQL statement, HTTP

@@ -4,6 +4,12 @@
 
 Hardening release after a second, fresh-eyes critical review. No API changes.
 
+- **Repo / packaging:** added `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, GitHub
+  issue/PR templates, README badges, and richer PyPI metadata (Python 3.9–3.13
+  classifiers, project URLs). Package builds clean and passes `twine check`.
+  Removed the redundant `examples/firewall_integration.py` (superseded by
+  `examples/guard_tool_call.py`).
+
 - **Tests:** coverage raised to **100%** (statement + branch) and now enforced in
   CI (`--cov-fail-under=100`). This closed previously untested branches, including
   the security-critical solana **owner-reassignment (takeover)** detection, SOL/

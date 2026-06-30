@@ -10,19 +10,33 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
 authors = [{ name = "simdiff contributors" }]
-keywords = ["ai-agents", "agent-security", "pre-execution", "simulation", "effect", "firewall", "guardrails"]
+keywords = [
+  "ai-agents", "agent-security", "pre-execution", "simulation", "effect",
+  "firewall", "guardrails", "mcp", "llm", "tool-calling",
+]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: Implementation :: CPython",
   "Topic :: Security",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
 ]
 dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/MrPredic/simdiff"
+Repository = "https://github.com/MrPredic/simdiff"
 Issues = "https://github.com/MrPredic/simdiff/issues"
+Changelog = "https://github.com/MrPredic/simdiff/blob/main/CHANGELOG.md"
 
 [project.scripts]
 simdiff = "simdiff.cli:main"
