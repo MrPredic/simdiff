@@ -60,27 +60,33 @@ class Session:
     def __init__(self, guard: Guard, budget: SessionBudget = SessionBudget()):
         self._guard = guard
         self.budget = budget
-        self.cumulative = CanonicalDelta()
-        self.step_count = 0
+        self.reset()
 
     def reset(self) -> None:
         self.cumulative = CanonicalDelta()
         self.step_count = 0
+        # distinct sets are tracked incrementally (committed on ALLOW) so a step is
+        # O(its own size), not O(whole session) — and they stay in sync with
+        # ``cumulative`` because both update only when a step is allowed.
+        self._reads: set = set()
+        self._mutated: set = set()
+        self._hosts: set = set()
 
     def step(self, tool: str, args: Mapping) -> SessionResult:
         call = self._guard.evaluate(tool, args)
-        prospective = self.cumulative.merge(call.delta)
+        delta = call.delta
 
         decisions = [call.decision]
         reasons: List[str] = []
         if call.decision is not Decision.ALLOW:
             reasons.append(f"per-call: {call.decision.value}")
-            reasons.extend(call.delta.unknown)
+            reasons.extend(delta.unknown)
 
-        reads = _distinct(prospective, {"READ"})
-        mutated = _distinct(prospective, _MUTATING)
-        hosts = _egress_hosts(prospective)
-        step_has_egress = bool(call.delta.value_moves)
+        # prospective totals = committed sets plus what this step would add
+        reads = self._reads | _distinct(delta, {"READ"})
+        mutated = self._mutated | _distinct(delta, _MUTATING)
+        hosts = self._hosts | _egress_hosts(delta)
+        step_has_egress = bool(delta.value_moves)
 
         if step_has_egress and len(reads) >= self.budget.recon_read_threshold:
             decisions.append(Decision.BLOCK)
@@ -104,7 +110,8 @@ class Session:
         decision = max(decisions, key=lambda d: _RANK[d])
 
         if decision is Decision.ALLOW:
-            self.cumulative = prospective
+            self.cumulative = self.cumulative.merge(delta)
+            self._reads, self._mutated, self._hosts = reads, mutated, hosts
             self.step_count += 1
 
-        return SessionResult(decision, call.delta, self.cumulative, reasons)
+        return SessionResult(decision, delta, self.cumulative, reasons)

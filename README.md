@@ -257,6 +257,24 @@ case-insensitive denylist, not a strawman — its weakness is structural. Number
 are asserted in [`tests/test_benchmark.py`](tests/test_benchmark.py) so they can't
 drift from the code.
 
+And the multi-step corpus — sessions whose *individual* calls are all benign, so
+the danger only exists in the accumulated composition:
+
+```
+$ python -m bench.session_run
+multi-step corpus: 11 sessions (6 attack, 5 benign)
+
+approach                              recall   false positives
+cumulative session firewall             100%                0%
+per-call effect check (baseline)          0%                0%
+```
+
+The baseline here is the *same* effect engine deciding one call at a time, under a
+policy permissive enough to keep the agent usable — it lets every step of these
+attacks through (recon→exfil, host fan-out, mass enumeration/deletion). Only
+deciding over the running effect catches them. Asserted in
+[`tests/test_session_benchmark.py`](tests/test_session_benchmark.py).
+
 **Honest caveat:** small, hand-built corpus. It shows the *direction* (effect-
 deciding beats text-matching on obfuscation), not production numbers. The 0%
 false-positive figure is corpus-specific — on real command streams the shell
@@ -266,7 +284,7 @@ adapter fail-closes on most input, so real-world FP is *high*, not zero.
 
 ```bash
 pip install -e .          # PyPI release pending
-python -m pytest -q       # 132 tests, 100% coverage
+python -m pytest -q       # 141 tests, 100% coverage
 ```
 
 Zero runtime dependencies — pure standard library (Solana RPC uses `urllib`).

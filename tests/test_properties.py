@@ -179,3 +179,79 @@ def test_merge_is_associative(a, b, c):
 @settings(max_examples=100)
 def test_merge_with_empty_is_identity(a):
     assert a.merge(CanonicalDelta()).to_dict() == a.to_dict()
+
+
+# --- session: cumulative firewall invariants ---------------------------------
+
+from simdiff.guard import Guard, Decision           # noqa: E402
+from simdiff.session import Session, SessionResult   # noqa: E402
+
+_RANK = {Decision.ALLOW: 0, Decision.NEEDS_APPROVAL: 1, Decision.BLOCK: 2}
+
+
+class _FakeAdapter:
+    domain = "fake"
+
+    def simulate(self, action):
+        return action
+
+    def extract_delta(self, effect, principal=None):
+        return effect
+
+
+def _fake_guard():
+    return Guard({"f": lambda a: (a["d"], _FakeAdapter())})
+
+
+@given(deltas=st.lists(_delta, max_size=10))
+@settings(max_examples=200)
+def test_session_decision_never_weaker_than_per_call(deltas):
+    # INVARIANT: the session verdict is never less restrictive than the per-call one.
+    guard = _fake_guard()
+    session = Session(guard)
+    for d in deltas:
+        per = guard.evaluate("f", {"d": d}).decision
+        res = session.step("f", {"d": d})
+        assert _RANK[res.decision] >= _RANK[per]
+
+
+@given(deltas=st.lists(_delta, max_size=10))
+@settings(max_examples=200)
+def test_session_step_count_equals_allowed_steps(deltas):
+    # INVARIANT: only an ALLOW step commits; step_count == number of ALLOWs.
+    session = Session(_fake_guard())
+    allowed = sum(1 for d in deltas if session.step("f", {"d": d}).decision is Decision.ALLOW)
+    assert session.step_count == allowed
+
+
+@given(deltas=st.lists(_delta, max_size=10))
+@settings(max_examples=100)
+def test_session_step_is_total(deltas):
+    # INVARIANT: no delta makes step() raise; it always returns a SessionResult.
+    session = Session(_fake_guard())
+    for d in deltas:
+        assert isinstance(session.step("f", {"d": d}), SessionResult)
+
+
+@given(deltas=st.lists(_delta, max_size=10))
+@settings(max_examples=150)
+def test_session_incremental_sets_match_cumulative(deltas):
+    # INVARIANT: the fast incremental read-set equals a full scan of cumulative —
+    # guards the O(n) refactor from drifting out of sync.
+    session = Session(_fake_guard())
+    for d in deltas:
+        session.step("f", {"d": d})
+    reads = {a.resource for a in session.cumulative.data_access if a.mode == "READ"}
+    assert session._reads == reads
+
+
+@given(deltas=st.lists(_delta, min_size=1, max_size=8))
+@settings(max_examples=100)
+def test_session_reset_is_a_fresh_session(deltas):
+    # INVARIANT: reset() restores the exact initial state.
+    session = Session(_fake_guard())
+    for d in deltas:
+        session.step("f", {"d": d})
+    session.reset()
+    assert session.step_count == 0
+    assert session.cumulative.to_dict() == CanonicalDelta().to_dict()
