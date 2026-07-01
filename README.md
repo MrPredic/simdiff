@@ -145,7 +145,7 @@ classified, `2` otherwise. `0` does **not** mean "allowed" — `rm prod.db` exit
 
 | Adapter | You pass | How it works | Executes the action? |
 |---|---|---|---|
-| `ShellAdapter(existing=…)` | a command line | **interprets** `rm`/`mv`/`cp`/`mkdir`/`touch`/`chmod`/redirects; fail-closed on anything else | no |
+| `ShellAdapter(existing=…)` | a command line | **interprets** `rm`/`mv`/`cp`/`mkdir`/`touch`/`chmod`/redirects, read-only commands (`ls`/`grep`/`git status`/...), and pipelines of them; fail-closed on anything else | no |
 | `HttpAdapter(allowed_hosts=…)` | an `HttpRequest` | classifies **egress** (bytes leaving for a non-allowed host) | no — never sends |
 | `SqlAdapter(connection)` | a SQL statement | runs inside `SAVEPOINT … ROLLBACK` | **yes** — rows roll back, side effects don't |
 | `FilesystemAdapter(sandbox)` | a callable `action(root)` | runs it on a **shadow copy**, diffs before/after | **yes** — isolate untrusted actions yourself |
@@ -227,9 +227,14 @@ Read this before putting simdiff in front of an agent.
   back). **Run simdiff inside your own isolation (container / VM / seccomp) for
   untrusted actions.**
 - **`shell`/`http` are conservative parsers.** They fail closed on anything
-  unmodelled (pipes, `$VAR`, globs, unknown commands → `unknown`). On real command
-  streams they flag a *lot* (`git`, `python`, any pipe) — low false-negative, high
-  false-positive, by design.
+  unmodelled (`$VAR`, globs, an unrecognized command, a pipeline containing one →
+  `unknown`). A broad set of pure-inspection commands (`ls`, `grep`, `git status`,
+  `find` without `-delete`/`-exec`, ...) and pipelines composed entirely of them
+  *are* modelled — see the [realistic-stream benchmark](#benchmark) below for the
+  actual before/after numbers. Anything with arbitrary program effect (`python
+  script.py`, `pip install`, `docker run`, ...) still fails closed by design — that
+  is correct, not a false positive, since no argument-level parser can know what
+  an arbitrary program will do.
 - **`solana` only sees accounts you list in `watch`.** A drain to an account you
   didn't enumerate is invisible; pre/post state come from two RPC calls, one slot
   apart.
@@ -262,7 +267,7 @@ the danger only exists in the accumulated composition:
 
 ```
 $ python -m bench.session_run
-multi-step corpus: 11 sessions (6 attack, 5 benign)
+multi-step corpus: 18 sessions (9 attack, 9 benign)
 
 approach                              recall   false positives
 cumulative session firewall             100%                0%
@@ -271,20 +276,51 @@ per-call effect check (baseline)          0%                0%
 
 The baseline here is the *same* effect engine deciding one call at a time, under a
 policy permissive enough to keep the agent usable — it lets every step of these
-attacks through (recon→exfil, host fan-out, mass enumeration/deletion). Only
-deciding over the running effect catches them. Asserted in
+attacks through (recon→exfil, low-and-slow host fan-out, mixed create/delete
+mutation, mass enumeration). The benign half is equally deliberate — dependency
+audits, code review, and CI builds that read or touch many resources for
+ordinary reasons — so the firewall is graded on discrimination, not just on
+blocking everything. Only deciding over the running effect catches the attacks.
+Asserted in
 [`tests/test_session_benchmark.py`](tests/test_session_benchmark.py).
 
-**Honest caveat:** small, hand-built corpus. It shows the *direction* (effect-
-deciding beats text-matching on obfuscation), not production numbers. The 0%
-false-positive figure is corpus-specific — on real command streams the shell
-adapter fail-closes on most input, so real-world FP is *high*, not zero.
+**Honest caveat:** still a small, hand-built corpus, modelled on documented
+*categories* of multi-step compromise (recon→exfil, fan-out, distributed
+mutation) — not a replay of production telemetry. It shows the *direction*
+(effect-deciding beats per-call checks on composition), not measured real-world
+prevalence.
+
+### Realistic command streams: how often does the shell adapter fail closed on nothing dangerous?
+
+The single biggest adoption risk for a fail-closed parser is nuisance approval
+prompts on ordinary commands. This corpus is not adversarial — it's the ordinary
+traffic a shell-executing coding agent emits (`git status`, `grep`, `pytest`,
+`pip install`, cleanup) — split into commands that *should* be fully classified
+(inspection, mutation) and ones that structurally can't be (opaque — arbitrary
+program effect, where failing closed is correct, not a false positive):
+
+```
+$ python -m bench.realistic_shell_run
+realistic shell corpus: 50 commands (31 inspection, 9 mutation, 10 opaque)
+
+adapter      overall   inspection   mutation   opaque
+legacy           24%          10%       100%       0%
+current          80%         100%       100%       0%
+```
+
+"legacy" is the adapter as it shipped in 0.3.0 (before the read-only-vocabulary
+and pipeline work below) — kept as a frozen snapshot in
+[`bench/legacy_shell_adapter.py`](bench/legacy_shell_adapter.py) purely for this
+comparison. `opaque` stays at 0% for both by design: `pip install`, `python
+script.py`, `docker run`, and similar cannot be certified from their arguments
+alone. Asserted in
+[`tests/test_realistic_shell_benchmark.py`](tests/test_realistic_shell_benchmark.py).
 
 ## Install
 
 ```bash
 pip install -e .          # PyPI release pending
-python -m pytest -q       # 141 tests, 100% coverage
+python -m pytest -q       # 187 tests, 100% coverage
 ```
 
 Zero runtime dependencies — pure standard library (Solana RPC uses `urllib`).

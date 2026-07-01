@@ -26,7 +26,7 @@ __all__ = [
     "ResourceUse",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 
 def simdiff(action: Any, adapter: Any, *, principal: Optional[str] = None) -> CanonicalDelta:

